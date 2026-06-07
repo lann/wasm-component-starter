@@ -1,0 +1,5 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "examples/async-composition/cli-app/Cargo.toml"
+  ]
+}
