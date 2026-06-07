@@ -1,22 +1,31 @@
 {
   "name": "wasm-component-model",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
 
-  // Node 26 ships JSPI natively (no flag required), which jco relies on for
-  // async component transpilation. The Node feature is layered on top of the
-  // image, so jco itself is installed in post-create once node is on PATH.
+  // Toolchains come from the official dev container Features rather than a
+  // custom Dockerfile. The Rust feature installs rustup + cargo and adds the
+  // wasm targets; Node 26 ships JSPI natively (no flag required), which jco
+  // relies on for async component transpilation; Python backs componentize-py.
+  // The component-model CLIs themselves are installed with cargo-binstall in
+  // the post-create hook (see post-create.sh).
   "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/rust:1": {
+      "targets": "wasm32-wasip2,wasm32-unknown-unknown"
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "26"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": false
     }
   },
 
   // Persist the cargo registry cache and build artifacts in named volumes.
   // Keeping `target` off the (slow, on macOS/Windows) workspace bind mount is
-  // a meaningful build-speed win; the registry cache survives rebuilds.
+  // a meaningful build-speed win; the registry cache survives rebuilds. The
+  // Rust feature sets CARGO_HOME=/usr/local/cargo, so the registry lives there.
   "mounts": [
     "source=wasm-component-cargo-registry,target=/usr/local/cargo/registry,type=volume",
     "source=wasm-component-target,target=${containerWorkspaceFolder}/target,type=volume"
