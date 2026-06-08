@@ -1,5 +1,6 @@
 {
   "rust-analyzer.linkedProjects": [
+    "examples/async-browser-streams/archiver/Cargo.toml",
     "examples/async-composition/cli-app/Cargo.toml"
   ]
 }

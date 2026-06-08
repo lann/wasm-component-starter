@@ -19,7 +19,7 @@ the whole archive) in memory.
                   │  archive(entries, contents) -> stream<u8>            │
                   │    1. encode a tar stream from contents              │
                   │    2. call the IMPORTED compressor.compress(tar)  ───┼──┐
-                  │    3. re-emit the gzipped bytes on its own stream    │  │
+                  │    3. return the compressor's gzip stream directly   │  │
                   └─────────────────────────────────────────────────────┘  │
                                           ▲                                 │
         host provides the import:         │   stream<u8> (gzip)             │
@@ -64,19 +64,33 @@ common target, `wasm32-wasip2`, where `std` keeps a working filesystem.)
 
 ## Returning a stream from an async export
 
-An async export can't fill its result stream before returning. `archive` creates
-a `wit_stream` pair, returns the *reader*, and uses `wit_bindgen::spawn` to run
-the pipeline (holding the *writer*) as a detached task — the "ping-pong"
-pattern. The detached task tar-encodes the input, calls the imported `compress`,
-reads its gzipped output, and re-emits it on the returned stream. See
+An async export can't fill its result stream before returning. `archive` spawns
+the tar producer with `wit_bindgen::spawn`, hands the tar stream to the imported
+`compress`, and returns the compressor's gzipped output stream *directly* — the
+component never reads or re-emits the result bytes itself. See
+[archiver/src/lib.rs](archiver/src/lib.rs).
+
+Returning a host-backed stream straight out of the export used to look like it
+truncated the gzip trailer: all the bytes actually arrived, but each element
+came back as a bare `number` rather than a `Uint8Array`, so a consumer doing
+`Uint8Array.from(value)` got empty chunks and the stream looked short. The cause
+was a jco code-gen bug (a host-lowered stream omitted the `typedArray` field
+that guest-created streams carry); the patch below fixes it, which is what lets
+`archive` return the compressor stream directly instead of reading and
+re-emitting it.
+
+The 512-byte `ustar` headers are built with the
+[`tar-core`](https://crates.io/crates/tar-core) crate rather than hand-rolled
+octal/checksum encoding; see `build_header` in
 [archiver/src/lib.rs](archiver/src/lib.rs).
 
 ## The `jco` patch this example requires (bytecodealliance/jco#1601)
 
-This example deliberately exercises a shape that jco 1.20.0 mis-transpiles: an
+This example deliberately exercises a shape that jco 1.21.0 mis-transpiles: an
 async **import** whose function takes a `stream<u8>` parameter *and* returns a
-`stream<u8>`. Transpiling it with `--async-mode jspi` hits two code-generation
-bugs in jco's `js-component-bindgen`:
+`stream<u8>`, whose result the `archive` export then returns directly.
+Transpiling it with `--async-mode jspi` hits three code-generation bugs in jco's
+`js-component-bindgen`:
 
 1. **[bytecodealliance/jco#1601](https://github.com/bytecodealliance/jco/issues/1601)
    — the lift side.** The lifted `future`/`stream` *parameter* of an async
@@ -86,14 +100,18 @@ bugs in jco's `js-component-bindgen`:
    an async host import is lowered twice (once inline, once by the async
    task-return machinery). The inline lower locks the host `ReadableStream`,
    throwing `TypeError: ReadableStream is locked`.
+3. **The stream element-metadata bug.** A host-lowered `stream` omitted the
+   `typedArray` field that guest-created streams (`streamNew`) include, so
+   reading a directly-returned host `stream<u8>` yielded bare `number`s instead
+   of `Uint8Array` chunks (see the section above).
 
 Until the upstream fix ships, this example carries a small patch to jco's code
-generator that fixes both
+generator that fixes all three
 ([jco-patch/function_bindgen.patch](jco-patch/function_bindgen.patch)). Apply it
 once before building:
 
 ```sh
-just patch-jco     # clone jco @ jco-v1.20.0, apply the patch, build, install
+just patch-jco     # clone jco @ jco-v1.21.0, apply the patch, build, install
 ```
 
 `patch-jco` backs up the stock jco objects as `*.orig`, so you can drop the

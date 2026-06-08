@@ -5,9 +5,10 @@
 # Why this exists
 # ---------------
 # This example *imports* an async streaming `compressor` interface whose
-# `compress` function takes a `stream<u8>` parameter and returns a `stream<u8>`.
-# Transpiling that shape with `jco transpile --async-mode jspi` hits two bugs in
-# jco 1.20.0's `js-component-bindgen` code generator:
+# `compress` function takes a `stream<u8>` parameter and returns a `stream<u8>`,
+# and the `archive` export returns that imported stream directly. Transpiling
+# that shape with `jco transpile --async-mode jspi` hits three bugs in jco
+# 1.21.0's `js-component-bindgen` code generator that are still unfixed upstream:
 #
 #   1. bytecodealliance/jco#1601 -- the *lift* of a `future`/`stream` parameter
 #      to an async import references an undefined `streamResult0`/`futureResult0`
@@ -18,20 +19,30 @@
 #      machinery), which locks the host `ReadableStream` ("ReadableStream is
 #      locked").
 #
-# `jco-patch/function_bindgen.patch` fixes both in
-# `crates/js-component-bindgen/src/function_bindgen.rs`. This is a temporary
+#   3. A host-lowered `stream` omitted the `typedArray` field from its element
+#      metadata that guest-created streams (`streamNew`) include. Reading a
+#      directly-returned host `stream<u8>` (e.g. the `archive` export forwarding
+#      the compressor's result stream) therefore yielded bare `number`s instead
+#      of `Uint8Array` chunks, so a consumer doing `Uint8Array.from(value)` saw
+#      empty chunks -- the gzip stream looked truncated. (This is what the older
+#      revision of this example worked around by reading and re-emitting the
+#      bytes itself; with the fix the export can return the stream directly.)
+#
+# The patch fixes #1601's two bugs in
+# `crates/js-component-bindgen/src/function_bindgen.rs` and the metadata bug in
+# `crates/js-component-bindgen/src/transpile_bindgen.rs`. This is a temporary
 # workaround; drop it once the upstream fix ships and re-run `just restore-jco`.
 #
 # What this does
 # --------------
-#   1. Clones jco at tag jco-v1.20.0 into a temp dir (or reuses $JCO_SRC).
+#   1. Clones jco at tag jco-v1.21.0 into a temp dir (or reuses $JCO_SRC).
 #   2. Applies the patch.
 #   3. Builds the patched bindgen (`cargo xtask build release`).
 #   4. Backs up the global jco's generated objects as *.orig (once).
 #   5. Copies the patched objects over the global install.
 set -euo pipefail
 
-JCO_TAG="jco-v1.20.0"
+JCO_TAG="jco-v1.21.0"
 JCO_REPO="https://github.com/bytecodealliance/jco"
 PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/function_bindgen.patch"
 
@@ -62,12 +73,18 @@ else
 fi
 
 # Install the Node deps the build needs (`cargo xtask build release` shells out
-# to `jco opt`, which imports `commander` et al. from packages/jco). We only need
-# runtime deps; `--omit=dev` skips puppeteer (whose postinstall downloads Chrome).
+# to `jco opt`, which imports `commander` et al. from packages/jco). jco 1.21.0 is
+# a pnpm workspace that uses pnpm `catalog:` versions, which `npm` can't parse, so
+# we install with pnpm. `--prod` skips dev deps (e.g. puppeteer, whose postinstall
+# downloads Chrome); `--filter` scopes the install to the jco package.
 if [[ ! -d "$JCO_SRC/packages/jco/node_modules/commander" ]]; then
-  echo "Installing jco's Node dependencies (npm install) ..."
-  PUPPETEER_SKIP_DOWNLOAD=true npm install --no-audit --no-fund --omit=dev \
-    --prefix "$JCO_SRC/packages/jco"
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "error: pnpm is required to install jco 1.21.0's workspace dependencies" >&2
+    exit 1
+  fi
+  echo "Installing jco's Node dependencies (pnpm install) ..."
+  PUPPETEER_SKIP_DOWNLOAD=true pnpm --dir "$JCO_SRC" install --prod \
+    --filter @bytecodealliance/jco --config.confirmModulesPurge=false
 fi
 
 # Build the patched code generator. The xtask's final step regenerates jco's own

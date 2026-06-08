@@ -6,7 +6,7 @@ default:
 build: transpile
 
 # One-time: build and install a patched jco that can transpile this example.
-# jco 1.20.0 mis-generates the async streaming `compressor` import (see
+# jco 1.21.0 mis-generates the async streaming `compressor` import (see
 # bytecodealliance/jco#1601 and jco-patch/apply.sh). Run this once before
 # `just build`/`test`/`serve`; run `just restore-jco` to revert.
 patch-jco:

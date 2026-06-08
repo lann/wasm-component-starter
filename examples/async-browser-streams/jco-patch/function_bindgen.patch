@@ -1,8 +1,8 @@
 diff --git a/crates/js-component-bindgen/src/function_bindgen.rs b/crates/js-component-bindgen/src/function_bindgen.rs
-index df95ae9..767f98b 100644
+index 7a947cf..0fd71c7 100644
 --- a/crates/js-component-bindgen/src/function_bindgen.rs
 +++ b/crates/js-component-bindgen/src/function_bindgen.rs
-@@ -2926,6 +2926,15 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -2689,6 +2689,15 @@ impl Bindgen for FunctionBindgen<'_> {
                          ("-1".into(), "undefined".into())
                      };
  
@@ -18,7 +18,7 @@ index df95ae9..767f98b 100644
                  uwriteln!(
                      self.src,
                      r#"
-@@ -3023,6 +3032,7 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -2786,6 +2795,7 @@ impl Bindgen for FunctionBindgen<'_> {
                  );
  
                  results.push(lowered_future_waitable_idx);
@@ -26,7 +26,7 @@ index df95ae9..767f98b 100644
              }
  
              Instruction::FutureLift { payload, ty } => {
-@@ -3075,10 +3085,18 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -2838,10 +2848,18 @@ impl Bindgen for FunctionBindgen<'_> {
                  let tmp = self.tmp();
                  let result_var = format!("futureResult{tmp}");
  
@@ -49,7 +49,7 @@ index df95ae9..767f98b 100644
                      // If we're dealing with a sync function, we can use the return directly
                      let arg_future_end_idx = operands
                          .first()
-@@ -3247,6 +3265,17 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -3010,6 +3028,17 @@ impl Bindgen for FunctionBindgen<'_> {
  
                  let tmp = self.tmp();
                  let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
@@ -67,7 +67,7 @@ index df95ae9..767f98b 100644
                  uwriteln!(
                      self.src,
                      r#"
-@@ -3309,6 +3338,7 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -3072,6 +3101,7 @@ impl Bindgen for FunctionBindgen<'_> {
                  );
  
                  results.push(lowered_stream_waitable_idx);
@@ -75,7 +75,7 @@ index df95ae9..767f98b 100644
              }
  
              Instruction::StreamLift { payload, ty } => {
-@@ -3360,10 +3390,18 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -3123,10 +3153,18 @@ impl Bindgen for FunctionBindgen<'_> {
                  let tmp = self.tmp();
                  let result_var = format!("streamResult{tmp}");
  
@@ -98,3 +98,39 @@ index df95ae9..767f98b 100644
                      // If we're dealing with a sync function, we can use the return directly
                      let arg_stream_end_idx = operands
                          .first()
+diff --git a/crates/js-component-bindgen/src/transpile_bindgen.rs b/crates/js-component-bindgen/src/transpile_bindgen.rs
+index 64d9e109..1f80ab1c 100644
+--- a/crates/js-component-bindgen/src/transpile_bindgen.rs
++++ b/crates/js-component-bindgen/src/transpile_bindgen.rs
+@@ -6064,6 +6064,7 @@ pub fn gen_flat_lower_fn_js_expr(
+                 is_none_type,
+                 is_numeric_type,
+                 is_async_value,
++                typed_array_js,
+             ) = match payload {
+                 None => (
+                     0,
+@@ -6075,6 +6076,7 @@ pub fn gen_flat_lower_fn_js_expr(
+                     true,
+                     false,
+                     false,
++                    "undefined",
+                 ),
+                 Some(payload_ty) => {
+                     let cabi = instantiator.types.canonical_abi(&payload_ty);
+@@ -6105,6 +6107,7 @@ pub fn gen_flat_lower_fn_js_expr(
+                             payload_ty,
+                             InterfaceType::Stream(_) | InterfaceType::Future(_)
+                         ),
++                        js_typed_array_ctor(&payload_ty).unwrap_or("undefined"),
+                     )
+                 }
+             };
+@@ -6121,6 +6124,7 @@ pub fn gen_flat_lower_fn_js_expr(
+                            isNumeric: {is_numeric_type},
+                            isBorrowed: {is_borrowed},
+                            isAsyncValue: {is_async_value},
++                           typedArray: {typed_array_js},
+                            flatCount: {payload_flat_count_js},
+                            align32: {payload_align32},
+                            size32: {payload_size32},
