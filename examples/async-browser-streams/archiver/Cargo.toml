@@ -1,0 +1,15 @@
+[package]
+name = "archiver"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# `async` brings in the component-model `stream`/`future` runtime support;
+# `async-spawn` provides `wit_bindgen::spawn`, which lets an async export return
+# a stream reader immediately while a detached task keeps writing the producer
+# end (the "ping-pong" pattern).
+wit-bindgen = { version = "0.57", features = ["async", "async-spawn"] }

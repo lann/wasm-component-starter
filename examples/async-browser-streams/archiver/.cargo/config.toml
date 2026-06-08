@@ -1,0 +1,6 @@
+[build]
+# Build a bare core module with no WASI imports, then `wasm-tools component new`
+# (see the justfile) wraps it into a component. The result imports nothing, so
+# the `jco`-transpiled output is a single self-contained ES module -- no
+# `preview2-shim` to bundle for the browser.
+target = "wasm32-unknown-unknown"

@@ -21,6 +21,7 @@ folder to a composed, running component quickly.
 | Example | What it shows |
 | --- | --- |
 | [examples/async-composition](examples/async-composition) | A Rust CLI component and a Python library component linked with `wac`, streaming data both directions through an `async` WIT interface. Demonstrates how to export an **async** `wasi:cli/run` (which a plain `wasm32-wasip2` binary cannot do) from a `wasm32-wasip2` `cdylib` using the `wasip3` crate, while still using `std` for file and stdio access, and how to fetch URLs over async `wasi:http` with the `http` crate via `wasip3`'s `http-compat` feature. |
+| [examples/async-browser-streams](examples/async-browser-streams) | A Rust component, transpiled with `jco` and driven from the **browser** over JSPI, that streams uploaded files into a `tar` archive, gzips them through an **imported** async streaming `compressor` interface (backed by the browser's `CompressionStream`), and saves the result — producing a `tar.gz` without ever buffering a whole file. Demonstrates an async streaming import flowing guest → host → guest, returning a stream from an async export via `wit_bindgen::spawn`, and mapping a component import to a JS adapter with `jco --map`. Ships a small temporary patch (`just patch-jco`) for two jco 1.20.0 transpile bugs around async streaming imports (bytecodealliance/jco#1601). |
 
 ## Toolchain
 

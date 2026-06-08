@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+#
+# Build a patched jco and install it over the globally-installed jco.
+#
+# Why this exists
+# ---------------
+# This example *imports* an async streaming `compressor` interface whose
+# `compress` function takes a `stream<u8>` parameter and returns a `stream<u8>`.
+# Transpiling that shape with `jco transpile --async-mode jspi` hits two bugs in
+# jco 1.20.0's `js-component-bindgen` code generator:
+#
+#   1. bytecodealliance/jco#1601 -- the *lift* of a `future`/`stream` parameter
+#      to an async import references an undefined `streamResult0`/`futureResult0`
+#      variable (a ReferenceError at runtime).
+#
+#   2. A mirror bug on the *lower* side: the return `stream`/`future` of an async
+#      host import is lowered twice (once inline, once by the async task-return
+#      machinery), which locks the host `ReadableStream` ("ReadableStream is
+#      locked").
+#
+# `jco-patch/function_bindgen.patch` fixes both in
+# `crates/js-component-bindgen/src/function_bindgen.rs`. This is a temporary
+# workaround; drop it once the upstream fix ships and re-run `just restore-jco`.
+#
+# What this does
+# --------------
+#   1. Clones jco at tag jco-v1.20.0 into a temp dir (or reuses $JCO_SRC).
+#   2. Applies the patch.
+#   3. Builds the patched bindgen (`cargo xtask build release`).
+#   4. Backs up the global jco's generated objects as *.orig (once).
+#   5. Copies the patched objects over the global install.
+set -euo pipefail
+
+JCO_TAG="jco-v1.20.0"
+JCO_REPO="https://github.com/bytecodealliance/jco"
+PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/function_bindgen.patch"
+
+# Locate the globally-installed jco package directory.
+GLOBAL_JCO="$(npm root -g)/@bytecodealliance/jco"
+if [[ ! -d "$GLOBAL_JCO/obj" ]]; then
+  echo "error: could not find global jco at $GLOBAL_JCO (is jco installed with 'npm i -g @bytecodealliance/jco'?)" >&2
+  exit 1
+fi
+
+# Clone (shallow, pinned to the tag) unless a source tree is provided.
+JCO_SRC="${JCO_SRC:-$(mktemp -d)/jco-src}"
+if [[ ! -d "$JCO_SRC/.git" ]]; then
+  echo "Cloning $JCO_REPO @ $JCO_TAG into $JCO_SRC ..."
+  git clone --depth 1 --branch "$JCO_TAG" "$JCO_REPO" "$JCO_SRC"
+fi
+
+# Apply the patch (idempotently).
+cd "$JCO_SRC"
+if git apply --check "$PATCH" 2>/dev/null; then
+  git apply "$PATCH"
+  echo "Applied $PATCH"
+elif git apply --reverse --check "$PATCH" 2>/dev/null; then
+  echo "Patch already applied -- skipping."
+else
+  echo "error: patch does not apply cleanly to $JCO_TAG" >&2
+  exit 1
+fi
+
+# Install the Node deps the build needs (`cargo xtask build release` shells out
+# to `jco opt`, which imports `commander` et al. from packages/jco). We only need
+# runtime deps; `--omit=dev` skips puppeteer (whose postinstall downloads Chrome).
+if [[ ! -d "$JCO_SRC/packages/jco/node_modules/commander" ]]; then
+  echo "Installing jco's Node dependencies (npm install) ..."
+  PUPPETEER_SKIP_DOWNLOAD=true npm install --no-audit --no-fund --omit=dev \
+    --prefix "$JCO_SRC/packages/jco"
+fi
+
+# Build the patched code generator. The xtask's final step regenerates jco's own
+# TypeScript `.d.ts` files, which can fail in a minimal `--omit=dev` checkout and
+# is irrelevant here: we only consume the `obj/*` bindgen artifacts produced
+# earlier by the transpile step. So we tolerate a non-zero exit as long as those
+# artifacts were written (verified below).
+echo "Building patched jco (cargo xtask build release) ..."
+cargo xtask build release || echo "note: xtask exited non-zero (likely the jco .d.ts step) -- verifying obj artifacts ..."
+
+# Back up the originals once, then install the patched objects.
+OBJ="$JCO_SRC/packages/jco/obj"
+for f in js-component-bindgen-component.core.wasm \
+         js-component-bindgen-component.core2.wasm \
+         js-component-bindgen-component.js; do
+  if [[ ! -f "$OBJ/$f" ]]; then
+    echo "error: expected build artifact missing: $OBJ/$f" >&2
+    exit 1
+  fi
+  if [[ ! -f "$GLOBAL_JCO/obj/$f.orig" ]]; then
+    cp "$GLOBAL_JCO/obj/$f" "$GLOBAL_JCO/obj/$f.orig"
+  fi
+  cp "$OBJ/$f" "$GLOBAL_JCO/obj/$f"
+done
+
+echo "Installed patched jco into $GLOBAL_JCO/obj (originals saved as *.orig)."
+echo "Run 'just restore-jco' to revert."

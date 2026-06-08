@@ -1,0 +1,100 @@
+diff --git a/crates/js-component-bindgen/src/function_bindgen.rs b/crates/js-component-bindgen/src/function_bindgen.rs
+index df95ae9..767f98b 100644
+--- a/crates/js-component-bindgen/src/function_bindgen.rs
++++ b/crates/js-component-bindgen/src/function_bindgen.rs
+@@ -2926,6 +2926,15 @@ impl Bindgen for FunctionBindgen<'_> {
+                         ("-1".into(), "undefined".into())
+                     };
+ 
++                // Mirror of `FutureLift`: lower a future operand inline only for
++                // sync functions, or for async functions when the operand is an
++                // incoming parameter. For async host *imports* the operand is
++                // the function's return value, which is lowered by the async
++                // return-handling code (`task.resolve`); lowering it inline too
++                // would consume/settle the future and double-lower it.
++                if self.is_async && !self.params.iter().any(|p| p == future_arg) {
++                    results.push(future_arg.clone());
++                } else {
+                 uwriteln!(
+                     self.src,
+                     r#"
+@@ -3023,6 +3032,7 @@ impl Bindgen for FunctionBindgen<'_> {
+                 );
+ 
+                 results.push(lowered_future_waitable_idx);
++                }
+             }
+ 
+             Instruction::FutureLift { payload, ty } => {
+@@ -3075,10 +3085,18 @@ impl Bindgen for FunctionBindgen<'_> {
+                 let tmp = self.tmp();
+                 let result_var = format!("futureResult{tmp}");
+ 
+-                // We only need to attempt to do an immediate lift in non-async cases,
+-                // as the return of the function execution ('above' in the code)
+-                // will be the future idx
+-                if !self.is_async {
++                // Emit an immediate lift for sync functions, and for async
++                // *imports* that take a `future` as a parameter (the operand is
++                // one of the function parameters, i.e. the incoming future-end
++                // index). For async *exports*, the future-end index is the
++                // function's return value (`ret`) and is handled by separate
++                // return-handling code, so we must not lift it here.
++                let lift_param_in_async = self
++                    .is_async
++                    && operands
++                        .first()
++                        .is_some_and(|op| self.params.iter().any(|p| p == op));
++                if !self.is_async || lift_param_in_async {
+                     // If we're dealing with a sync function, we can use the return directly
+                     let arg_future_end_idx = operands
+                         .first()
+@@ -3247,6 +3265,17 @@ impl Bindgen for FunctionBindgen<'_> {
+ 
+                 let tmp = self.tmp();
+                 let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
++
++                // Mirror of `StreamLift`: lower a stream operand inline only for
++                // sync functions, or for async functions when the operand is an
++                // incoming parameter (e.g. an export lowering a `stream` param
++                // to hand to the guest). For async host *imports* the operand is
++                // the function's return value, which is lowered by the async
++                // return-handling code (`task.resolve`); lowering it inline too
++                // would consume/lock the stream and double-lower it.
++                if self.is_async && !self.params.iter().any(|p| p == stream_arg) {
++                    results.push(stream_arg.clone());
++                } else {
+                 uwriteln!(
+                     self.src,
+                     r#"
+@@ -3309,6 +3338,7 @@ impl Bindgen for FunctionBindgen<'_> {
+                 );
+ 
+                 results.push(lowered_stream_waitable_idx);
++                }
+             }
+ 
+             Instruction::StreamLift { payload, ty } => {
+@@ -3360,10 +3390,18 @@ impl Bindgen for FunctionBindgen<'_> {
+                 let tmp = self.tmp();
+                 let result_var = format!("streamResult{tmp}");
+ 
+-                // We only need to attempt to do an immediate lift in non-async cases,
+-                // as the return of the function execution ('above' in the code)
+-                // will be the stream idx
+-                if !self.is_async {
++                // Emit an immediate lift for sync functions, and for async
++                // *imports* that take a `stream` as a parameter (the operand is
++                // one of the function parameters, i.e. the incoming stream-end
++                // index). For async *exports*, the stream-end index is the
++                // function's return value (`ret`) and is handled by separate
++                // return-handling code, so we must not lift it here.
++                let lift_param_in_async = self
++                    .is_async
++                    && operands
++                        .first()
++                        .is_some_and(|op| self.params.iter().any(|p| p == op));
++                if !self.is_async || lift_param_in_async {
+                     // If we're dealing with a sync function, we can use the return directly
+                     let arg_stream_end_idx = operands
+                         .first()
