@@ -1,0 +1,7 @@
+package example:html-metadata@0.1.0;
+
+interface extractor {
+    /// Consume an HTML document -- streamed in as UTF-8 bytes -- and produce
+    /// page metadata as `(key, value)` pairs as they are discovered.
+    extract: async func(html: stream<u8>) -> stream<tuple<string, string>>;
+}

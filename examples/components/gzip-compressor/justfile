@@ -1,0 +1,22 @@
+# Build the `gzip-compressor` component.
+#
+# A pure-Rust gzip encoder built for `wasm32-unknown-unknown` (so `std` pulls in
+# no `wasi:*` imports) and finalized into a component with `wasm-tools component
+# new`. It imports nothing and exports the `compressor` interface, so it can be
+# composed in wherever that import needs satisfying.
+
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Rust -> bare wasm32-unknown-unknown core module -> component.
+build:
+    cargo build --release
+    mkdir -p build
+    wasm-tools component new \
+      target/wasm32-unknown-unknown/release/gzip_compressor.wasm \
+      -o build/gzip-compressor.component.wasm
+
+# Remove build artifacts.
+clean:
+    rm -rf build target

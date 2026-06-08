@@ -1,0 +1,18 @@
+[package]
+name = "metadata-printer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+bytes = "1"
+futures-util = "0.3"
+http = "1"
+http-body-util = "0.1"
+# `http-compat` adds idiomatic `http`-crate request/response conversions and the
+# `wasi:http` client bindings used by the URL-fetching code in `src/lib.rs`.
+wasip3 = { version = "0.6", features = ["http-compat"] }
+wit-bindgen = "0.57"

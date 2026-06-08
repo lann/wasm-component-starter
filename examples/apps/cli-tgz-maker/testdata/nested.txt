@@ -1,0 +1,3 @@
+A second member, stored at a path with no directory component. The archiver
+truncates names to the 100-byte ustar name field; short names like this pass
+through unchanged.

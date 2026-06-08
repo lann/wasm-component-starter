@@ -1,0 +1,53 @@
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Build the component and transpile it to a browser-ready ES module.
+build: transpile
+
+# One-time: build and install a patched jco that can transpile this example.
+# jco 1.21.0 mis-generates the async streaming `compressor` import (see
+# bytecodealliance/jco#1601 and jco-patch/apply.sh). Run this once before
+# `just build`/`test`/`serve`; run `just restore-jco` to revert.
+patch-jco:
+    bash jco-patch/apply.sh
+
+# Revert the patched jco installed by `just patch-jco`.
+restore-jco:
+    bash jco-patch/restore.sh
+
+# Rust -> bare wasm32-unknown-unknown core module -> component. Built by the
+# tar-archiver component's own justfile under ../../components.
+component:
+    just --justfile ../../components/tar-archiver/justfile build
+
+# Component -> JS via jco. JSPI (`--async-mode jspi`) is what lets the async
+# `archive` export and the async `compress` import suspend on their streams.
+# `--map` points the imported `compressor` interface at our `CompressionStream`
+# adapter, and both the export and the import are named so jco wraps them as
+# async (JSPI) functions.
+transpile: component
+    jco transpile ../../components/tar-archiver/build/tar-archiver.component.wasm \
+      --name archiver \
+      --async-mode jspi \
+      --async-exports 'example:archiver/archiver@0.1.0#archive' \
+      --async-imports 'example:archiver/compressor@0.1.0#compress' \
+      --map 'example:archiver/compressor@0.1.0=../compressor.js' \
+      -o web/generated
+
+# Serve the demo. Open the printed URL in a JSPI-capable browser (recent
+# Chromium). Python's http.server sends `application/wasm`, which the core
+# module needs for streaming compilation.
+serve: transpile
+    @echo "Serving http://localhost:8080  (Ctrl-C to stop)"
+    cd web && python3 -m http.server 8080
+
+# Build, transpile, and run the headless end-to-end pipeline under Node (which
+# also speaks JSPI), asserting the archive round-trips correctly.
+test: transpile
+    node test/smoke.mjs
+
+# Remove build artifacts.
+clean:
+    rm -rf build web/generated
+    just --justfile ../../components/tar-archiver/justfile clean

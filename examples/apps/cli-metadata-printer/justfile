@@ -1,0 +1,63 @@
+# `cli-metadata-printer` app: compose the `metadata-printer` and
+# `metadata-parser` components and run them under `wasmtime`.
+#
+# The two components are built by their own justfiles under `../../components/`.
+# This app wires them together: the parser's `extractor` export is plugged into
+# the printer's `extractor` import, producing a single runnable component.
+
+COMPONENTS := "../../components"
+
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Build both components and compose them into build/app.wasm.
+build: compose
+
+# Build the Rust CLI driver component.
+metadata-printer:
+    just --justfile {{COMPONENTS}}/metadata-printer/justfile build
+
+# Build the Python parser component.
+metadata-parser:
+    just --justfile {{COMPONENTS}}/metadata-parser/justfile build
+
+# Plug the parser's exports into the printer's imports.
+compose: metadata-printer metadata-parser
+    mkdir -p build
+    wac plug \
+      {{COMPONENTS}}/metadata-printer/build/metadata-printer.component.wasm \
+      --plug {{COMPONENTS}}/metadata-parser/build/metadata-parser.component.wasm \
+      -o build/app.wasm
+
+# Build then run with the given arguments.
+run +ARGS: build
+    wasmtime run -W component-model-async=y -S p3 -S http -S inherit-network --dir . build/app.wasm {{ARGS}}
+
+# Build then run with the sample input
+run-sample: (run "testdata/sample.html")
+
+# test: run against the sample document and assert key metadata is extracted.
+test: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    output=$(just --justfile {{justfile()}} run-sample)
+    echo "$output"
+    for expected in \
+        "title                  Widgets, Gadgets & Gizmos — Acme Corp" \
+        "lang                   en" \
+        "charset                utf-8" \
+        "link:canonical         https://example.com/products" \
+        "h1                     Everything you need, and a few things you don't"; do
+        if ! grep -qF "$expected" <<<"$output"; then
+            echo "FAIL: expected line not found: $expected" >&2
+            exit 1
+        fi
+    done
+    echo "PASS: all expected metadata present"
+
+# Remove build artifacts (this app's and the components').
+clean:
+    rm -rf build
+    just --justfile {{COMPONENTS}}/metadata-printer/justfile clean
+    just --justfile {{COMPONENTS}}/metadata-parser/justfile clean

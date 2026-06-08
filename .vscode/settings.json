@@ -1,6 +1,8 @@
 {
   "rust-analyzer.linkedProjects": [
-    "examples/async-browser-streams/archiver/Cargo.toml",
-    "examples/async-composition/cli-app/Cargo.toml"
+    "examples/components/cli-archive-maker/Cargo.toml",
+    "examples/components/gzip-compressor/Cargo.toml",
+    "examples/components/metadata-printer/Cargo.toml",
+    "examples/components/tar-archiver/Cargo.toml",
   ]
 }

@@ -1,0 +1,17 @@
+[package]
+name = "cli-archive-maker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Concurrently drive the producer (feeding file bytes in) and the consumer
+# (draining the tar.gz out) with `futures_util::join!`.
+futures-util = "0.3"
+# Provides the async `wasi:cli/run` export. No `http-compat` here -- this driver
+# only touches the filesystem and the `archiver` import.
+wasip3 = "0.6"
+wit-bindgen = "0.57"

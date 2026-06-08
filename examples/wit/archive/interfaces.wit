@@ -1,0 +1,38 @@
+package example:archive@0.1.0;
+
+/// Streaming compression.
+///
+/// In this repo two different providers satisfy this:
+///
+/// - the browser app maps it to a one-line `CompressionStream('gzip')` host
+///   adapter (see `apps/browser-tgz-maker`), and
+/// - the CLI app composes in the `gzip-compressor` component, a pure-Rust gzip
+///   encoder (see `components/gzip-compressor`).
+///
+/// From the archiver's point of view gzip is just an async streaming function
+/// it can call; neither side is ever fully buffered.
+interface compressor {
+    compress: async func(data: stream<u8>) -> stream<u8>;
+}
+
+/// A streaming file archiver.
+///
+/// It is designed so that large files can be archived without ever holding a
+/// whole file -- or the whole archive -- in memory. It is driven both from
+/// JavaScript in the browser (via `jco`/JSPI) and from another component (the
+/// CLI archive maker), over the same interface.
+interface archiver {
+    /// One member of the archive.
+    record entry {
+        /// Archive member path, e.g. `docs/readme.txt`.
+        name: string,
+        /// Exact byte length of this member's bytes within `contents`.
+        size: u64,
+    }
+
+    /// Build a file archive.
+    ///
+    /// `entries` lists the members in archive order; `contents` is every
+    /// member's bytes concatenated in that same order.
+    archive: async func(entries: list<entry>, contents: stream<u8>) -> stream<u8>;
+}

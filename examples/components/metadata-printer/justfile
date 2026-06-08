@@ -1,0 +1,22 @@
+# Build the `metadata-printer` component.
+#
+# A `wasm32-wasip2` `cdylib` that exports an *async* `wasi:cli/run` (via the
+# `wasip3` crate) and imports the `extractor` interface. The `wasm32-wasip2`
+# linker auto-componentizes the cdylib, so there is no `wasm-tools component
+# new` step here. The result still has an unsatisfied `extractor` import; the
+# `cli-metadata-printer` app composes it with the `metadata-parser` component.
+
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Rust -> wasm32-wasip2 component (extractor import left unsatisfied).
+build:
+    cargo build --release
+    mkdir -p build
+    cp target/wasm32-wasip2/release/metadata_printer.wasm \
+       build/metadata-printer.component.wasm
+
+# Remove build artifacts.
+clean:
+    rm -rf build target

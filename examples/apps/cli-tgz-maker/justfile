@@ -1,0 +1,89 @@
+# `cli-tgz-maker` app: compose the `cli-archive-maker`, `tar-archiver`, and
+# `gzip-compressor` components into a single runnable `tar.gz` tool and run it
+# under `wasmtime`.
+#
+# Composition graph (each arrow is one satisfied import):
+#
+#   cli-archive-maker --imports archiver--> tar-archiver
+#                                  tar-archiver --imports compressor--> gzip-compressor
+#
+# `wac plug` only wires plug exports into the *socket's* imports, not plug into
+# plug, so we compose in two steps: first satisfy the tar-archiver's
+# `compressor` import with the gzip-compressor, then satisfy the
+# cli-archive-maker's `archiver` import with that combined component.
+#
+# This is the CLI counterpart to `../browser-tgz-maker`: the same `tar-archiver`
+# runs, but its `compressor` import is satisfied by a real Rust component instead
+# of the browser's `CompressionStream`, and it is driven from `wasi:cli/run`
+# instead of from JavaScript.
+
+COMPONENTS := "../../components"
+
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Build all three components and compose them into build/app.wasm.
+build: compose
+
+# Build the CLI driver component (imports `archiver`).
+cli-archive-maker:
+    just --justfile {{COMPONENTS}}/cli-archive-maker/justfile build
+
+# Build the tar archiver component (exports `archiver`, imports `compressor`).
+tar-archiver:
+    just --justfile {{COMPONENTS}}/tar-archiver/justfile build
+
+# Build the gzip compressor component (exports `compressor`).
+gzip-compressor:
+    just --justfile {{COMPONENTS}}/gzip-compressor/justfile build
+
+# Two-step composition (see the header note).
+compose: cli-archive-maker tar-archiver gzip-compressor
+    mkdir -p build
+    # 1. Plug gzip-compressor's `compressor` export into tar-archiver's import.
+    wac plug \
+      {{COMPONENTS}}/tar-archiver/build/tar-archiver.component.wasm \
+      --plug {{COMPONENTS}}/gzip-compressor/build/gzip-compressor.component.wasm \
+      -o build/tar-archiver.plugged.wasm
+    # 2. Plug the combined archiver into cli-archive-maker's `archiver` import.
+    wac plug \
+      {{COMPONENTS}}/cli-archive-maker/build/cli-archive-maker.component.wasm \
+      --plug build/tar-archiver.plugged.wasm \
+      -o build/app.wasm
+
+# Build then run: cli-tgz-maker <output.tar.gz> <input-file>...
+# The preopened `--dir .` is the working directory, so paths are relative to it.
+run +ARGS: build
+    wasmtime run -W component-model-async=y -S p3 --dir . build/app.wasm {{ARGS}}
+
+# Build then archive the bundled sample files into build/sample.tar.gz.
+run-sample: build
+    just --justfile {{justfile()}} run build/sample.tar.gz testdata/poem.txt testdata/data.bin testdata/nested.txt
+
+# test: archive the sample files, then untar with the system `tar` and assert
+# every member round-trips byte-for-byte.
+test: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=build/sample.tar.gz
+    just --justfile {{justfile()}} run "$out" testdata/poem.txt testdata/data.bin testdata/nested.txt
+    echo "--- contents ---"
+    tar tzvf "$out"
+    work=$(mktemp -d)
+    tar xzf "$out" -C "$work"
+    for f in poem.txt data.bin nested.txt; do
+        if ! cmp -s "testdata/$f" "$work/$f"; then
+            echo "FAIL: $f did not round-trip" >&2
+            exit 1
+        fi
+    done
+    rm -rf "$work"
+    echo "PASS: all members round-tripped byte-for-byte"
+
+# Remove build artifacts (this app's and the components').
+clean:
+    rm -rf build
+    just --justfile {{COMPONENTS}}/cli-archive-maker/justfile clean
+    just --justfile {{COMPONENTS}}/tar-archiver/justfile clean
+    just --justfile {{COMPONENTS}}/gzip-compressor/justfile clean

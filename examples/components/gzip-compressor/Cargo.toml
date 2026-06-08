@@ -1,0 +1,12 @@
+[package]
+name = "gzip-compressor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+wit-bindgen = { version = "0.57", features = ["async", "async-spawn"] }

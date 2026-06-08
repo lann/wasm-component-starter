@@ -1,0 +1,23 @@
+# Build the `tar-archiver` component.
+#
+# This is a pure byte transform: it is built for `wasm32-unknown-unknown` (so
+# `std` pulls in no `wasi:*` imports) and finalized into a component with
+# `wasm-tools component new`. Its only import is the `compressor` interface,
+# satisfied downstream either by a host adapter (browser app) or by the
+# `gzip-compressor` component (CLI app).
+
+# Show the available recipes.
+default:
+    @just --justfile {{justfile()}} --list
+
+# Rust -> bare wasm32-unknown-unknown core module -> component.
+build:
+    cargo build --release
+    mkdir -p build
+    wasm-tools component new \
+      target/wasm32-unknown-unknown/release/tar_archiver.wasm \
+      -o build/tar-archiver.component.wasm
+
+# Remove build artifacts.
+clean:
+    rm -rf build target

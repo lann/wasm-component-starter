@@ -1,0 +1,13 @@
+The streaming tar archiver builds each member's 512-byte ustar header from the
+size it is told up front, then copies exactly that many bytes straight through
+from the shared input stream. Because the length is known before the bytes, no
+file is ever buffered whole -- the archiver, the gzip compressor, and the caller
+all work a chunk at a time.
+
+This file exists so the cli-tgz-maker example has something with a few hundred
+bytes of real text to compress. Repetition compresses well, which makes the
+gzip step visibly smaller than the raw tar:
+
+  the quick brown fox jumps over the lazy dog
+  the quick brown fox jumps over the lazy dog
+  the quick brown fox jumps over the lazy dog
