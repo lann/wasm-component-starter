@@ -7,8 +7,10 @@ build: transpile
 
 # One-time: build and install a patched jco that can transpile this example.
 # jco 1.21.0 mis-generates the async streaming `compressor` import (see
-# bytecodealliance/jco#1601 and jco-patch/apply.sh). Run this once before
-# `just build`/`test`/`serve`; run `just restore-jco` to revert.
+# bytecodealliance/jco#1601) and fails to emit the `_utf8AllocateAndEncode`
+# helper used when lowering string fields inside the nested `stream<entry>`
+# (see jco-patch/apply.sh). Run this once before `just build`/`test`/`serve`;
+# run `just restore-jco` to revert.
 patch-jco:
     bash jco-patch/apply.sh
 
@@ -30,9 +32,9 @@ transpile: component
     jco transpile ../../components/tar-archiver/build/tar-archiver.component.wasm \
       --name archiver \
       --async-mode jspi \
-      --async-exports 'example:archiver/archiver@0.1.0#archive' \
-      --async-imports 'example:archiver/compressor@0.1.0#compress' \
-      --map 'example:archiver/compressor@0.1.0=../compressor.js' \
+      --async-exports 'example:archive/archiver@0.1.0#archive' \
+      --async-imports 'example:archive/compressor@0.1.0#compress' \
+      --map 'example:archive/compressor@0.1.0=../compressor.js' \
       -o web/generated
 
 # Serve the demo. Open the printed URL in a JSPI-capable browser (recent

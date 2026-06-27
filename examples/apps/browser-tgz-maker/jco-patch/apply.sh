@@ -6,9 +6,11 @@
 # ---------------
 # This example *imports* an async streaming `compressor` interface whose
 # `compress` function takes a `stream<u8>` parameter and returns a `stream<u8>`,
-# and the `archive` export returns that imported stream directly. Transpiling
-# that shape with `jco transpile --async-mode jspi` hits three bugs in jco
-# 1.21.0's `js-component-bindgen` code generator that are still unfixed upstream:
+# and the `archive` export returns that imported stream directly. The `archive`
+# export also takes a `stream<entry>` where each `entry` record carries a
+# `name: string` and a nested `contents: stream<u8>`. Transpiling that shape
+# with `jco transpile --async-mode jspi` hits four bugs in jco 1.21.0's
+# `js-component-bindgen` code generator that are still unfixed upstream:
 #
 #   1. bytecodealliance/jco#1601 -- the *lift* of a `future`/`stream` parameter
 #      to an async import references an undefined `streamResult0`/`futureResult0`
@@ -28,9 +30,21 @@
 #      revision of this example worked around by reading and re-emitting the
 #      bytes itself; with the fix the export can return the stream directly.)
 #
+#   4. Lowering a `string` field inside a stream/record payload (e.g. an
+#      `entry.name` carried by `archive`'s `stream<entry>`) emits a call to the
+#      `_utf8AllocateAndEncode` helper, but `render_intrinsics` never emits the
+#      helper's definition: the `LowerFlatStringUtf8` dependency block inserts
+#      only the `TEXT_ENCODER_UTF8` global, not the `Utf8Encode` string
+#      intrinsic that defines `_utf8AllocateAndEncode`. The resulting
+#      `ReferenceError: _utf8AllocateAndEncode is not defined` is swallowed by
+#      the stream-write machinery, so the read side waits forever -- it *looks*
+#      like a nested-stream deadlock but is really a crash in string lowering.
+#
 # The patch fixes #1601's two bugs in
-# `crates/js-component-bindgen/src/function_bindgen.rs` and the metadata bug in
-# `crates/js-component-bindgen/src/transpile_bindgen.rs`. This is a temporary
+# `crates/js-component-bindgen/src/function_bindgen.rs`, the metadata bug in
+# `crates/js-component-bindgen/src/transpile_bindgen.rs`, and the missing
+# string-intrinsic dependency in
+# `crates/js-component-bindgen/src/intrinsics/mod.rs`. This is a temporary
 # workaround; drop it once the upstream fix ships and re-run `just restore-jco`.
 #
 # What this does

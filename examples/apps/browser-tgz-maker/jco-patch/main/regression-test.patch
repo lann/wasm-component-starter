@@ -1,0 +1,137 @@
+diff --git a/crates/test-components/src/bin/stream_lower_return.rs b/crates/test-components/src/bin/stream_lower_return.rs
+new file mode 100644
+index 0000000..c8be29c
+--- /dev/null
++++ b/crates/test-components/src/bin/stream_lower_return.rs
+@@ -0,0 +1,30 @@
++mod bindings {
++    use super::Component;
++    wit_bindgen::generate!({
++        world: "stream-lower-return",
++    });
++    export!(Component);
++}
++
++use bindings::exports::jco::test_components::stream_lower_return_test;
++use bindings::jco::test_components::stream_lower_return_host;
++
++struct Component;
++
++impl stream_lower_return_test::Guest for Component {
++    async fn read_host_stream(vals: Vec<u32>) -> Vec<u32> {
++        // Call an async import whose return value is a `stream<u32>`, then drain
++        // it. The transpiled glue must lower the host-provided stream exactly
++        // once; lowering it both inline and via the async task-return machinery
++        // locks the underlying ReadableStream (the "double lower" regression).
++        let mut rx = stream_lower_return_host::produce_stream(vals).await;
++        let mut out = Vec::new();
++        while let Some(v) = rx.next().await {
++            out.push(v);
++        }
++        out
++    }
++}
++
++// Stub only to ensure this works as a binary
++fn main() {}
+diff --git a/crates/test-components/wit/all.wit b/crates/test-components/wit/all.wit
+index c3b3be8..5e309af 100644
+--- a/crates/test-components/wit/all.wit
++++ b/crates/test-components/wit/all.wit
+@@ -534,4 +534,32 @@ world lift-list-before-fixed {
+ world pass-back-host-resolved-future-value {
+     import send: async func(f: future<u32>) -> u32;
+     export local-run-async;
++}
++
++// Regression coverage for the stream "double lower" bug.
++//
++// An async *import* whose return value is a `stream<T>` had that returned
++// stream lowered twice: once by the inline lowering emitted for the call's
++// results, and once again by the async task-return machinery. The second
++// lowering tried to re-acquire a reader on a `ReadableStream` that was already
++// locked, surfacing as:
++//
++//   TypeError [ERR_INVALID_STATE]: Invalid state: ReadableStream is locked
++//
++// (or a hang, since the error was swallowed). The guest below calls such an
++// import and drains the returned stream, so transpiled glue that double-lowers
++// the import's return value fails this fixture.
++//
++// See examples/apps/browser-tgz-maker for the original reproduction.
++interface stream-lower-return-host {
++  produce-stream: async func(vals: list<u32>) -> stream<u32>;
++}
++
++interface stream-lower-return-test {
++  read-host-stream: async func(vals: list<u32>) -> list<u32>;
++}
++
++world stream-lower-return {
++  import stream-lower-return-host;
++  export stream-lower-return-test;
+ }
+\ No newline at end of file
+diff --git a/packages/jco/test/p3/deadlock-regressions.js b/packages/jco/test/p3/deadlock-regressions.js
+index eed2469..afb1dc6 100644
+--- a/packages/jco/test/p3/deadlock-regressions.js
++++ b/packages/jco/test/p3/deadlock-regressions.js
+@@ -5,7 +5,12 @@ import { suite, test, assert } from "vitest";
+ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+ 
+ import { setupAsyncTest } from "../helpers.js";
+-import { LOCAL_TEST_COMPONENTS_DIR, toTypedArrayChunks } from "../common.js";
++import {
++    LOCAL_TEST_COMPONENTS_DIR,
++    createReadableStreamFromValues,
++    toTypedArray,
++    toTypedArrayChunks,
++} from "../common.js";
+ 
+ suite("async scheduling regressions", () => {
+     test("host future can be completed by a guest sibling task", async () => {
+@@ -130,4 +135,44 @@ suite("async scheduling regressions", () => {
+             await cleanup();
+         }
+     });
++
++    // Regression test for the stream "double lower" bug: an async *import* whose
++    // return value is a `stream<T>` was lowered twice -- once by the inline
++    // lowering emitted for the call results, and once again by the async
++    // task-return machinery. The second lowering re-acquired a reader on an
++    // already-locked ReadableStream, producing
++    //   TypeError [ERR_INVALID_STATE]: Invalid state: ReadableStream is locked
++    // (or a hang, since the error was swallowed). The guest drains the imported
++    // stream and returns its values, so a double-lowered return value either
++    // throws or stalls here instead of round-tripping.
++    //
++    // See examples/apps/browser-tgz-maker for the original reproduction.
++    test("async import returning a stream is lowered exactly once", async () => {
++        const vals = [1, 2, 3, 4, 5];
++
++        const { instance, cleanup } = await setupAsyncTest({
++            asyncMode: "jspi",
++            component: {
++                path: join(LOCAL_TEST_COMPONENTS_DIR, "stream-lower-return.wasm"),
++                imports: {
++                    ...new WASIShim().getImportObject(),
++                    "jco:test-components/stream-lower-return-host": {
++                        // Async import whose return value is a stream. Returning
++                        // a ReadableStream here must be lowered exactly once.
++                        produceStream: async (requested) =>
++                            createReadableStreamFromValues([...requested]),
++                    },
++                },
++            },
++        });
++
++        try {
++            assert.deepEqual(
++                await instance["jco:test-components/stream-lower-return-test"].readHostStream(vals),
++                toTypedArray(Uint32Array, vals),
++            );
++        } finally {
++            await cleanup();
++        }
++    });
+ });

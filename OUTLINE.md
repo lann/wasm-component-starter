@@ -4,21 +4,21 @@ This document serves as a high-density reference for autonomous agents and exper
 
 ## I. Canonical Specifications
 
-Do not memorize these documents wholesale; retain their scope to query them efficiently. The umbrella reference is the [Component Model book](https://component-model.bytecodealliance.org/) and its [`WebAssembly/component-model`](https://github.com/WebAssembly/component-model) repository.
+Do not memorize these documents wholesale; retain their scope to query them efficiently.
 
-* **[The Component Model Explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md):** The architectural blueprint. Defines language agnosticism, virtualization boundaries, the share-nothing architecture, and the canonical ABI for complex cross-module type passing.
-* **[The Concurrency Explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Concurrency.md):** The definitive standard on the async ABI. Crucial for understanding cooperative multitasking and how components yield backpressure to the host instead of blocking an OS thread.
-* **[The WIT (Wasm Interface Type) Specification](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md):** The IDL syntax and semantics. The absolute source of truth for type mapping, resource definitions, and world declarations.
+* **The Component Model Explainer:** The architectural blueprint. Defines language agnosticism, virtualization boundaries, the share-nothing architecture, and the canonical ABI for complex cross-module type passing.
+* **The Concurrency Explainer:** The definitive standard on the async ABI. Crucial for understanding cooperative multitasking and how components yield backpressure to the host instead of blocking an OS thread.
+* **The WIT (Wasm Interface Type) Specification:** The IDL syntax and semantics. The absolute source of truth for type mapping, resource definitions, and world declarations.
 
 ## II. Toolchain Ecosystem
 
 Distinguish strictly between host runtimes, linkers, build tools, and code generators.
 
-* **[`wasmtime`](https://github.com/bytecodealliance/wasmtime):** The canonical host runtime. Executes components and provisions host-side WASI implementations. *(Note: Embedder API provisioning details are highly useful for test harnesses but should be deferred to external documentation to save context.)*
-* **[`wasm-tools`](https://github.com/bytecodealliance/wasm-tools):** The low-level inspection and manipulation suite. Validates components, translates text-to-binary (`wat2wasm`), and inspects structures (`wasm-tools component info`). It handles "lifting and lowering" (translating complex WIT types to/from Core Wasm linear memory), though interface designers rarely need these low-level details.
-* **[`wac`](https://github.com/bytecodealliance/wac) (WebAssembly Compose):** The component linker. Statically satisfies component imports by plugging them into the exports of other components.
-* **[`wit-bindgen`](https://github.com/bytecodealliance/wit-bindgen):** The code generator. Translates WIT files into guest-side bindings for interacting with imports/exports.
-* **[`jco`](https://github.com/bytecodealliance/jco):** The JavaScript toolchain. Transpiles Wasm components into standard ES modules for Node.js or browser execution.
+* **`wasmtime`:** The canonical host runtime. Executes components and provisions host-side WASI implementations. *(Note: Embedder API provisioning details are highly useful for test harnesses but should be deferred to external documentation to save context.)*
+* **`wasm-tools`:** The low-level inspection and manipulation suite. Validates components, translates text-to-binary (`wat2wasm`), and inspects structures (`wasm-tools component info`). It handles "lifting and lowering" (translating complex WIT types to/from Core Wasm linear memory), though interface designers rarely need these low-level details.
+* **`wac` (WebAssembly Compose):** The component linker. Statically satisfies component imports by plugging them into the exports of other components.
+* **`wit-bindgen`:** The code generator. Translates WIT files into guest-side bindings for interacting with imports/exports.
+* **`jco`:** The JavaScript toolchain. Transpiles Wasm components into standard ES modules for Node.js or browser execution.
 
 ### Host Invocation Flags (`wasmtime`)
 
@@ -32,16 +32,16 @@ A component only gets a host capability if the runtime is told to provision it; 
 
 ## III. WASI (WebAssembly System Interface) Evolution
 
-WASI defines the standard API boundaries. Understanding the paradigm shift between stable (0.2) and upcoming (0.3) versions is critical for architectural planning. The proposal index lives at [`WebAssembly/WASI`](https://github.com/WebAssembly/WASI) (see the [proposals list](https://github.com/WebAssembly/WASI/blob/main/docs/Proposals.md)); [WASI Preview 2](https://github.com/WebAssembly/WASI/blob/main/docs/Preview2.md) is the current stable bundle.
+WASI defines the standard API boundaries. Understanding the paradigm shift between stable (0.2) and upcoming (0.3) versions is critical for architectural planning.
 
 * **WASI P2 (0.2.x) vs. P3 (0.3.0-drafts):**
-* **I/O:** P3 completely replaces the complex [`wasi:io`](https://github.com/WebAssembly/wasi-io) package—which relied on manual pollables and stream management—with native component model async features.
-* **HTTP:** P3 merges [`wasi:http`](https://github.com/WebAssembly/wasi-http) incoming and outgoing types into a unified model, an architectural simplification enabled directly by the native async primitives.
+* **I/O:** P3 completely replaces the complex `wasi:io` package—which relied on manual pollables and stream management—with native component model async features.
+* **HTTP:** P3 merges `wasi:http` incoming and outgoing types into a unified model, an architectural simplification enabled directly by the native async primitives.
 
 
 * **Common Worlds:** Components target specific "worlds" defining their execution environment:
-* [`wasi:cli/command`](https://github.com/WebAssembly/wasi-cli): Traditional CLI execution.
-* [`wasi:http/proxy`](https://github.com/WebAssembly/wasi-http) (transitioning to `wasi:http/service` in 0.3): HTTP-driven request/response handling.
+* `wasi:cli/command`: Traditional CLI execution.
+* `wasi:http/proxy` (transitioning to `wasi:http/service` in 0.3): HTTP-driven request/response handling.
 
 
 
@@ -49,9 +49,9 @@ WASI defines the standard API boundaries. Understanding the paradigm shift betwe
 
 Rust is the primary language for component authoring. Target selection dictates runtime capabilities.
 
-* **[`wasm32-wasip2`](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html):** The stable standard. Provides a complete sysroot mapped to WASI Preview 2 synchronous APIs.
-* **[`wasm32-unknown-unknown`](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html):** Bare-metal WebAssembly. Requires extensive polyfilling for I/O, but is often the least-bad option for advanced, custom use cases where standard WASI bindings interfere or are unnecessary.
-* **The [`wasip3`](https://crates.io/crates/wasip3) crate:** The experimental edge for async capability. It provides bindings for asynchronous host capabilities and is used in conjunction with `wasm32-wasip2` or `wasm32-unknown-unknown`. *(Do not use the `wasm32-wasip3` target; it is not ready for use at the time of this writing).*
+* **`wasm32-wasip2`:** The stable standard. Provides a complete sysroot mapped to WASI Preview 2 synchronous APIs.
+* **`wasm32-unknown-unknown`:** Bare-metal WebAssembly. Requires extensive polyfilling for I/O, but is often the least-bad option for advanced, custom use cases where standard WASI bindings interfere or are unnecessary.
+* **The `wasip3` crate:** The experimental edge for async capability. It provides bindings for asynchronous host capabilities and is used in conjunction with `wasm32-wasip2` or `wasm32-unknown-unknown`. *(Do not use the `wasm32-wasip3` target; it is not ready for use at the time of this writing).*
 
 ### The `wasm32-wasip2` CLI Cannot Export an Async `run`
 

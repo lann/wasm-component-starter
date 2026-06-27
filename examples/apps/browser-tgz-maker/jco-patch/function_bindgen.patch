@@ -98,8 +98,38 @@ index 7a947cf..0fd71c7 100644
                      // If we're dealing with a sync function, we can use the return directly
                      let arg_stream_end_idx = operands
                          .first()
+diff --git a/crates/js-component-bindgen/src/intrinsics/mod.rs b/crates/js-component-bindgen/src/intrinsics/mod.rs
+index cafb412..3a8cad0 100644
+--- a/crates/js-component-bindgen/src/intrinsics/mod.rs
++++ b/crates/js-component-bindgen/src/intrinsics/mod.rs
+@@ -1474,6 +1474,25 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+     {
+         args.intrinsics
+             .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
++        // The lowered-string body calls `_utf8AllocateAndEncode` (the
++        // `Utf8Encode` string intrinsic) to realloc guest memory and encode the
++        // string into it. Without this the helper is referenced but never
++        // emitted, throwing `ReferenceError: _utf8AllocateAndEncode is not
++        // defined` when a string is lowered as part of a stream/record payload.
++        args.intrinsics
++            .insert(Intrinsic::String(StringIntrinsic::Utf8Encode));
++    }
++
++    if args
++        .intrinsics
++        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16))
++    {
++        // Mirror of the UTF-8 case: the lowered-string body calls
++        // `_utf16AllocateAndEncode` (the `Utf16Encode` string intrinsic), which
++        // in turn needs `IsLE`. Emit both so the helper is defined.
++        args.intrinsics
++            .insert(Intrinsic::String(StringIntrinsic::Utf16Encode));
++        args.intrinsics.insert(Intrinsic::IsLE);
+     }
+ 
+     if args
 diff --git a/crates/js-component-bindgen/src/transpile_bindgen.rs b/crates/js-component-bindgen/src/transpile_bindgen.rs
-index 64d9e109..1f80ab1c 100644
+index 64d9e10..00db938 100644
 --- a/crates/js-component-bindgen/src/transpile_bindgen.rs
 +++ b/crates/js-component-bindgen/src/transpile_bindgen.rs
 @@ -6064,6 +6064,7 @@ pub fn gen_flat_lower_fn_js_expr(

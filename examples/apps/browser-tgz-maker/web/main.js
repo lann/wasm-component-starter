@@ -3,16 +3,15 @@
 // Data flow (every hop streams; nothing is buffered whole):
 //
 //   FileList
-//     -> a list<entry> (name + size of each File) plus one stream<u8> of every
-//        file's bytes concatenated in order
-//        -> archiver.archive(entries, contents)  ==> tar.gz stream
+//     -> a stream<entry>, each entry carrying its name, size, and its own
+//        stream<u8> of bytes
+//        -> archiver.archive(entries)  ==> tar.gz stream
 //           -> download as archive.tar.gz
 //
 // The gzip step happens *inside* the component, which calls back out to the
 // host's `compressor` import (see ./compressor.js, backed by the browser's
 // CompressionStream). From JavaScript's side it is a single call that takes the
-// file list and the concatenated byte stream in and yields the finished tar.gz
-// out.
+// stream of entries in and yields the finished tar.gz out.
 
 import { archiver } from "./generated/archiver.js";
 
@@ -46,11 +45,7 @@ goButton.addEventListener("click", async () => {
 
         // One call in, one tar.gz stream out -- the component tars the bytes and
         // pipes them through the imported (host-provided) gzip compressor.
-        const entries = files.map((file) => ({
-            name: file.name,
-            size: BigInt(file.size),
-        }));
-        const archiveStream = toReadable(await archive(entries, concatFiles(files)));
+        const archiveStream = toReadable(await archive(entryStream(files)));
 
         await download(archiveStream, "archive.tar.gz");
         log("Done. archive.tar.gz is ready.");
@@ -62,26 +57,23 @@ goButton.addEventListener("click", async () => {
     }
 });
 
-// Build the single `stream<u8>` the component consumes: every file's bytes
-// concatenated in the same order as `entries`. Files are read lazily, one chunk
-// at a time, so a multi-gigabyte selection never lands in memory at once. The
-// archiver knows each member's length from its `entry.size`, so it can slice
-// this flat byte stream back into individual files.
-function concatFiles(files) {
-    const readers = files.map((file) => file.stream().getReader());
+// Build the `stream<entry>` the component consumes: one entry per file, each
+// carrying the file's own `stream<u8>` of bytes. Files are read lazily, one
+// chunk at a time, so a multi-gigabyte selection never lands in memory at once.
+function entryStream(files) {
     let index = 0;
     return new ReadableStream({
-        async pull(controller) {
-            while (index < readers.length) {
-                const { value, done } = await readers[index].read();
-                if (done) {
-                    index += 1;
-                    continue;
-                }
-                controller.enqueue(value);
-                return;
+        pull(controller) {
+            if (index < files.length) {
+                const file = files[index++];
+                controller.enqueue({
+                    name: file.name,
+                    size: BigInt(file.size),
+                    contents: file.stream(),
+                });
+            } else {
+                controller.close();
             }
-            controller.close();
         },
     });
 }

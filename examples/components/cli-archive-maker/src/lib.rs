@@ -84,36 +84,46 @@ wasip3::cli::command::export!(Component);
 /// Stream `files` from disk into the `archiver` import and write the resulting
 /// archive straight to `output`, returning the number of archive bytes written.
 ///
-/// Each `(path, size)` pair was stat'd by the caller; we open the file here and
-/// copy it in `BUFFER_SIZE` chunks, so even a multi-gigabyte input never lands
-/// in memory. Nothing is buffered whole on either side: input bytes flow disk
-/// -> archiver and archive bytes flow archiver -> disk a chunk at a time.
+/// Each `(path, size)` pair was stat'd by the caller. We hand the archiver a
+/// `stream<entry>`; each `entry` carries its own `contents` stream, which we
+/// feed from disk in `BUFFER_SIZE` chunks. Writing an entry and then streaming
+/// its bytes keeps us in lockstep with the archiver -- it reads one entry,
+/// drains that member's `contents`, and only then sees the next entry -- so even
+/// a multi-gigabyte input never lands in memory. Nothing is buffered whole on
+/// either side: input bytes flow disk -> archiver and archive bytes flow
+/// archiver -> disk a chunk at a time.
 async fn build_archive(output: &str, files: &[(String, u64)]) -> std::io::Result<u64> {
     use std::io::{Read, Write};
 
-    let entries: Vec<Entry> = files
-        .iter()
-        .map(|(path, size)| Entry {
-            name: Path::new(path)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.clone()),
-            size: *size,
-        })
-        .collect();
+    let (mut entry_tx, entry_rx) = wit_stream::new();
 
-    let (mut tx, rx) = wit_stream::new();
-
-    // Producer: stream each file's bytes from disk in fixed-size chunks, in the
-    // same order as `entries`, then drop `tx` to signal end-of-input. We assert
-    // each file yields exactly the `size` we promised the archiver -- a short or
-    // long read (e.g. the file changed since we stat'd it) would desync the tar
-    // framing, so it is better to fail loudly than to emit a corrupt archive.
+    // Producer: for each file, hand the archiver an `entry` carrying a fresh
+    // content stream, then stream that file's bytes into it. We assert each file
+    // yields exactly the `size` we stat'd -- a short or long read (e.g. the file
+    // changed since we stat'd it) would desync the tar framing, so it is better
+    // to fail loudly than to emit a corrupt archive.
     let producer = async {
         for (path, expected) in files {
+            let name = Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.clone());
+
             let mut file = std::fs::File::open(path).map_err(|err| {
                 std::io::Error::new(err.kind(), format!("could not open `{path}`: {err}"))
             })?;
+
+            // A fresh byte stream for this member: the reader half travels inside
+            // the `entry` to the archiver; the writer half stays here.
+            let (mut content_tx, content_rx) = wit_stream::new();
+            let _ = entry_tx
+                .write_all(vec![Entry {
+                    name,
+                    size: *expected,
+                    contents: content_rx,
+                }])
+                .await;
+
             let mut buf = vec![0u8; BUFFER_SIZE];
             let mut read_total: u64 = 0;
             loop {
@@ -124,13 +134,18 @@ async fn build_archive(output: &str, files: &[(String, u64)]) -> std::io::Result
                     break;
                 }
                 read_total += n as u64;
-                let _ = tx.write_all(buf[..n].to_vec()).await;
+                let _ = content_tx.write_all(buf[..n].to_vec()).await;
             }
+            // Dropping the writer signals end-of-member to the archiver.
+            drop(content_tx);
+
             assert_eq!(
                 read_total, *expected,
                 "`{path}`: streamed {read_total} bytes but metadata reported {expected}",
             );
         }
+        // Dropping the entry writer signals end-of-archive.
+        drop(entry_tx);
         Ok::<(), std::io::Error>(())
     };
 
@@ -141,7 +156,7 @@ async fn build_archive(output: &str, files: &[(String, u64)]) -> std::io::Result
         let mut out = std::fs::File::create(output).map_err(|err| {
             std::io::Error::new(err.kind(), format!("could not create `{output}`: {err}"))
         })?;
-        let mut result = archiver::archive(entries, rx).await;
+        let mut result = archiver::archive(entry_rx).await;
         let mut written: u64 = 0;
         loop {
             let (status, batch) = result.read(Vec::with_capacity(BUFFER_SIZE)).await;

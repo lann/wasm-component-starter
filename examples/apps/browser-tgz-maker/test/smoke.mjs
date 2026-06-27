@@ -2,9 +2,9 @@
 // (which, like the browser, drives the transpiled component over JSPI).
 //
 // It mirrors exactly what the browser does:
-//   1. Build a `list<entry>` (name + size of each member) plus one `stream<u8>`
-//      of every member's bytes concatenated in order.
-//   2. `archive(entries, contents)` -> a ReadableStream of the gzipped tar.
+//   1. Build a `stream<entry>`, each entry carrying its name, size, and its own
+//      `stream<u8>` of bytes.
+//   2. `archive(entries)` -> a ReadableStream of the gzipped tar.
 //      Internally the component encodes a tar stream and pipes it through the
 //      imported `compressor` (../web/compressor.js, backed by the platform's
 //      CompressionStream) -- the async streaming *import* that exercises the
@@ -32,26 +32,37 @@ const files = [
     { name: "big.txt", bytes: encoder.encode("x".repeat(100_000)) },
 ];
 
-// A single ReadableStream of every file's bytes concatenated in order, yielded
-// in small chunks to exercise the streaming path (never holding a whole file at
-// once). This is the flat `stream<u8>` the component consumes; it slices the
-// members back apart using each `entry.size`.
-function concatenatedContents() {
+// The `stream<entry>` describing the archive members, in order. Each entry
+// carries its own `stream<u8>` of bytes, yielded in small chunks to exercise
+// the streaming path (never holding a whole file at once).
+function entryStream() {
+    let index = 0;
     return new ReadableStream({
-        start(controller) {
-            for (const f of files) {
-                for (let off = 0; off < f.bytes.length; off += 4096) {
-                    controller.enqueue(f.bytes.subarray(off, off + 4096));
-                }
+        pull(controller) {
+            if (index < files.length) {
+                const f = files[index++];
+                controller.enqueue({
+                    name: f.name,
+                    size: BigInt(f.bytes.length),
+                    contents: fileContents(f.bytes),
+                });
+            } else {
+                controller.close();
             }
-            controller.close();
         },
     });
 }
 
-// The `list<entry>` describing the archive members, in order.
-function entries() {
-    return files.map((f) => ({ name: f.name, size: BigInt(f.bytes.length) }));
+// One file's bytes as a `stream<u8>`, emitted in small chunks.
+function fileContents(bytes) {
+    return new ReadableStream({
+        start(controller) {
+            for (let off = 0; off < bytes.length; off += 4096) {
+                controller.enqueue(bytes.subarray(off, off + 4096));
+            }
+            controller.close();
+        },
+    });
 }
 
 // jco surfaces a component `stream<u8>` as its own async-iterable `Stream`
@@ -120,11 +131,34 @@ function assert(cond, msg) {
 
 // --- Run the pipeline ------------------------------------------------------
 
-const archiveStream = toReadable(await archive(entries(), concatenatedContents()));
+// The nested-stream interface (`archive(entries: stream<entry>)`, each entry
+// carrying its own `contents: stream<u8>`) needs the patched jco installed by
+// `just patch-jco`; stock jco 1.21.0 throws an (internally swallowed)
+// `ReferenceError` while lowering an entry's `name`, which stalls the read side
+// forever. With the patch the pipeline round-trips fine (and so does the same
+// component under wasmtime, see ../../apps/cli-tgz-maker). This watchdog guards
+// against any future stall so the test fails fast instead of hanging.
+const WATCHDOG_MS = 10_000;
+const watchdog = setTimeout(() => {
+    console.error(
+        `FAIL: timed out after ${WATCHDOG_MS} ms.\n` +
+            "  The nested-stream pipeline stalled. Did you run 'just patch-jco'?\n" +
+            "  Stock jco 1.21.0 cannot drive archive(entries: stream<entry>)\n" +
+            "  where each entry carries its own contents: stream<u8>; the patch\n" +
+            "  under jco-patch/ fixes it. The same component also round-trips\n" +
+            "  under wasmtime via ../../apps/cli-tgz-maker.",
+    );
+    process.exit(1);
+}, WATCHDOG_MS);
+watchdog.unref();
+
+const archiveStream = toReadable(await archive(entryStream()));
 
 const gzipped = await collect(archiveStream);
 const tar = gunzipSync(gzipped);
 const members = parseTar(tar);
+
+clearTimeout(watchdog);
 
 assert(members.length === files.length, `expected ${files.length} members, got ${members.length}`);
 for (let i = 0; i < files.length; i++) {

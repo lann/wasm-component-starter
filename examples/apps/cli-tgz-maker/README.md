@@ -12,12 +12,13 @@ is driven from `wasi:cli/run` instead of from JavaScript.
 
 ```
   files on disk
-       │  std::fs::read
+       │  std::fs::metadata + read (streamed)
        ▼
-┌──────────────────────┐  list<entry> + stream<u8>   ┌──────────────────────┐
-│  cli-archive-maker    │ ──────────────────────────► │  tar-archiver        │
-│  (Rust, wasm32-wasip2)│                             │  (Rust, no WASI)     │
-│  async wasi:cli/run   │ ◄────────────────────────── │  archive(...)        │
+┌──────────────────────┐  stream<entry>              ┌──────────────────────┐
+│  cli-archive-maker    │  (each: name, size,         │  tar-archiver        │
+│  (Rust, wasm32-wasip2)│   contents: stream<u8>)     │  (Rust, no WASI)     │
+│  async wasi:cli/run   │ ──────────────────────────► │  archive(entries)    │
+│                       │ ◄────────────────────────── │                      │
 └──────────────────────┘      stream<u8> (tar.gz)     └──────────┬───────────┘
        │  std::fs::write                                         │ stream<u8>
        ▼                                          compressor.compress (import)
@@ -67,13 +68,13 @@ wac plug cli-archive-maker.component.wasm \
 ```
 
 The result, `app.wasm`, imports only `wasi:cli` and `wasi:filesystem` — all the
-`example:archiver` imports are satisfied internally.
+`example:archive` imports are satisfied internally.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
-| [../../wit/archiver/world.wit](../../wit/archiver/world.wit) | The `archiver` and `compressor` interfaces plus the three worlds. |
+| [../../wit/archive/interfaces.wit](../../wit/archive/interfaces.wit) | The `archiver` and `compressor` interfaces. |
 | [../../components/cli-archive-maker/src/lib.rs](../../components/cli-archive-maker/src/lib.rs) | Rust CLI driver: async `wasi:cli/run`, reads files, calls `archive`. |
 | [../../components/tar-archiver/src/lib.rs](../../components/tar-archiver/src/lib.rs) | The streaming `tar` encoder that drives the imported compressor. |
 | [../../components/gzip-compressor/src/lib.rs](../../components/gzip-compressor/src/lib.rs) | Pure-Rust streaming gzip provider of the `compressor` interface. |

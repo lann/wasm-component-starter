@@ -6,10 +6,10 @@
 //! from JavaScript in the browser via [`jco`](https://github.com/bytecodealliance/jco)
 //! and JSPI (see `apps/browser-tgz-maker`), and from another component, the CLI
 //! archive maker, composed with the `gzip-compressor` component (see
-//! `apps/cli-tgz-maker`). Either way the caller passes a `list<entry>` plus one
-//! `stream<u8>` of every member's bytes concatenated in order; the component
-//! encodes a tar stream, pipes it through the imported compressor, and the
-//! gzipped archive streams back out.
+//! `apps/cli-tgz-maker`). Either way the caller passes a `stream<entry>` where
+//! each member carries its own `contents` stream; the component encodes a tar
+//! stream, pipes it through the imported compressor, and the gzipped archive
+//! streams back out. No member -- nor the whole archive -- is ever buffered.
 //!
 //! ## Returning a stream from an async export
 //!
@@ -52,15 +52,15 @@ const CHUNK: usize = 64 * 1024;
 struct Component;
 
 impl Guest for Component {
-    /// Stream `contents` into a tar archive described by `entries`, gzip it via
-    /// the imported compressor, and return the resulting `tar.gz` stream.
-    async fn archive(entries: Vec<Entry>, contents: StreamReader<u8>) -> StreamReader<u8> {
+    /// Stream `entries` into a tar archive, gzip it via the imported compressor,
+    /// and return the resulting `tar.gz` stream.
+    async fn archive(entries: StreamReader<Entry>) -> StreamReader<u8> {
         // Produce the tar bytes on a detached task and hand that stream to the
         // gzip compressor. We return the compressor's output stream straight
         // out of the export -- this component never has to read and re-emit the
         // gzipped bytes itself. (`compress` is the async streaming *import*.)
         let (tar_tx, tar_rx) = wit_stream::new();
-        wit_bindgen::spawn(produce_tar(entries, contents, tar_tx));
+        wit_bindgen::spawn(produce_tar(entries, tar_tx));
         compressor::compress(tar_rx).await
     }
 }
@@ -69,38 +69,44 @@ export!(Component);
 
 /// Producer task spawned by [`archive`](Component): writes the tar byte stream
 /// to `tx`.
-async fn produce_tar(
-    entries: Vec<Entry>,
-    mut contents: StreamReader<u8>,
-    mut tx: StreamWriter<u8>,
-) {
-    for entry in entries {
-        // Header first -- it declares the length, so the reader knows exactly
-        // how many content bytes follow.
-        let _ = tx
-            .write_all(build_header(&entry.name, entry.size).to_vec())
-            .await;
+async fn produce_tar(mut entries: StreamReader<Entry>, mut tx: StreamWriter<u8>) {
+    loop {
+        // Read the next member from the `stream<entry>`, one at a time.
+        let (status, batch) = entries.read(Vec::with_capacity(1)).await;
+        for entry in batch {
+            // Header first -- it declares the length, so the reader knows
+            // exactly how many content bytes follow.
+            let _ = tx
+                .write_all(build_header(&entry.name, entry.size).to_vec())
+                .await;
 
-        // Copy exactly `entry.size` bytes from the shared input stream. We never
-        // read past the declared length, so the next member's bytes stay queued.
-        let mut remaining = entry.size;
-        while remaining > 0 {
-            let want = remaining.min(CHUNK as u64) as usize;
-            let (status, buf) = contents.read(Vec::with_capacity(want)).await;
-            if !buf.is_empty() {
-                remaining -= buf.len() as u64;
-                let _ = tx.write_all(buf).await;
+            // Copy exactly `entry.size` bytes from this member's own content
+            // stream. We never read past the declared length.
+            let mut contents = entry.contents;
+            let mut remaining = entry.size;
+            while remaining > 0 {
+                let want = remaining.min(CHUNK as u64) as usize;
+                let (status, buf) = contents.read(Vec::with_capacity(want)).await;
+                if !buf.is_empty() {
+                    remaining -= buf.len() as u64;
+                    let _ = tx.write_all(buf).await;
+                }
+                if matches!(status, StreamResult::Dropped | StreamResult::Cancelled) {
+                    // This member's content stream ended early; stop here.
+                    remaining = 0;
+                }
             }
-            if matches!(status, StreamResult::Dropped | StreamResult::Cancelled) {
-                // Input ended early; stop emitting this member.
-                remaining = 0;
+
+            // tar pads each member out to a 512-byte boundary with zeros.
+            let padding = (512 - (entry.size % 512)) % 512;
+            if padding > 0 {
+                let _ = tx.write_all(vec![0u8; padding as usize]).await;
             }
         }
 
-        // tar pads each member out to a 512-byte boundary with zeros.
-        let padding = (512 - (entry.size % 512)) % 512;
-        if padding > 0 {
-            let _ = tx.write_all(vec![0u8; padding as usize]).await;
+        if matches!(status, StreamResult::Dropped | StreamResult::Cancelled) {
+            // No more members.
+            break;
         }
     }
 

@@ -70,7 +70,8 @@
 
     <p>
       The component exports one <code>async</code> function over component-model
-      <code>stream&lt;u8&gt;</code>s, <code>archive(entries, contents)</code>,
+      streams, <code>archive(entries: stream&lt;entry&gt;)</code> where each
+      <code>entry</code> carries its own <code>contents: stream&lt;u8&gt;</code>,
       and <em>imports</em> an async streaming
       <code>compressor.compress(stream&lt;u8&gt;)</code>. gzip happens in the
       host via <code>CompressionStream('gzip')</code>, because a component cannot

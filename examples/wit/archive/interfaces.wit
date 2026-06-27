@@ -26,13 +26,16 @@ interface archiver {
     record entry {
         /// Archive member path, e.g. `docs/readme.txt`.
         name: string,
-        /// Exact byte length of this member's bytes within `contents`.
+        /// Exact byte length of this member's `contents` stream.
         size: u64,
+        /// This member's bytes, carried as their own stream.
+        contents: stream<u8>,
     }
 
     /// Build a file archive.
     ///
-    /// `entries` lists the members in archive order; `contents` is every
-    /// member's bytes concatenated in that same order.
-    archive: async func(entries: list<entry>, contents: stream<u8>) -> stream<u8>;
+    /// `entries` is a stream of members in archive order; each member carries
+    /// its own `contents` stream, so a member's bytes flow straight through
+    /// without ever being buffered whole or concatenated with its neighbours.
+    archive: async func(entries: stream<entry>) -> stream<u8>;
 }
