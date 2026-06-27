@@ -2,7 +2,7 @@
 #
 # `componentize-py` compiles `app.py` (and the Python runtime it needs) into a
 # component that exports the `extractor` interface from the shared
-# `example:metadata` WIT package. The component imports nothing.
+# `example:html-metadata` WIT package. The component imports nothing.
 
 # Show the available recipes.
 default:
@@ -12,7 +12,7 @@ default:
 build:
     mkdir -p build
     componentize-py \
-      -d ../../wit/metadata-parser -w metadata-parser \
+      -d ../../wit/html-metadata -w metadata-parser \
       componentize -p . app -o build/metadata-parser.component.wasm
 
 # Remove build artifacts.

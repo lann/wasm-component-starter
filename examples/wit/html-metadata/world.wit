@@ -1,0 +1,13 @@
+package example:html-metadata@0.1.0;
+
+/// World targeted by the Python `metadata-parser` component
+/// (`componentize-py -w metadata-parser`). It exports the streaming
+/// `extractor` interface and imports nothing -- no filesystem, network, or
+/// clock -- so the component is a pure, capability-free transform.
+///
+/// The Rust `metadata-printer` component consumes `extractor` from the *other*
+/// side via an inline `import` world declared in its `wit_bindgen::generate!`
+/// macro, so it needs no named world here.
+world metadata-parser {
+    export extractor;
+}

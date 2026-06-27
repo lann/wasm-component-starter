@@ -23,7 +23,7 @@ directions.
 
 The two components live under [`../../components`](../../components)
 (`metadata-printer`, `metadata-parser`) and share the
-[`example:metadata`](../../wit/metadata-parser/world.wit) WIT package. This app
+[`example:html-metadata`](../../wit/html-metadata) WIT package. This app
 directory only composes and runs them.
 
 ## Why this example exists
@@ -99,7 +99,8 @@ discussion of this and other Component Model pitfalls.
 
 | Path | Role |
 | --- | --- |
-| [../../wit/metadata-parser/world.wit](../../wit/metadata-parser/world.wit) | The `extractor` interface plus the `metadata-parser` and `metadata-printer` worlds. |
+| [../../wit/html-metadata/interfaces.wit](../../wit/html-metadata/interfaces.wit) | The streaming `extractor` interface. |
+| [../../wit/html-metadata/world.wit](../../wit/html-metadata/world.wit) | The `metadata-parser` world the Python component exports (the Rust printer uses an inline import world). |
 | [../../components/metadata-parser/app.py](../../components/metadata-parser/app.py) | Python metadata extractor, compiled with `componentize-py`. |
 | [../../components/metadata-printer/src/lib.rs](../../components/metadata-printer/src/lib.rs) | Rust CLI: async `wasi:cli/run`, file/URL reading, streaming, formatting. |
 | [testdata/sample.html](testdata/sample.html) | A rich sample document to extract from. |

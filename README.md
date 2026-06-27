@@ -18,10 +18,16 @@ folder to a composed, running component quickly.
 
 ## Examples
 
-| Example | What it shows |
+Each example lives under [examples/](examples/), split into reusable
+**components** ([examples/components/](examples/components)) and runnable
+**apps** ([examples/apps/](examples/apps)) that compose those components and run
+them. Every project has its own README, WIT, and `justfile`.
+
+| App | What it shows |
 | --- | --- |
-| [examples/async-composition](examples/async-composition) | A Rust CLI component and a Python library component linked with `wac`, streaming data both directions through an `async` WIT interface. Demonstrates how to export an **async** `wasi:cli/run` (which a plain `wasm32-wasip2` binary cannot do) from a `wasm32-wasip2` `cdylib` using the `wasip3` crate, while still using `std` for file and stdio access, and how to fetch URLs over async `wasi:http` with the `http` crate via `wasip3`'s `http-compat` feature. |
-| [examples/async-browser-streams](examples/async-browser-streams) | A Rust component, transpiled with `jco` and driven from the **browser** over JSPI, that streams uploaded files into a `tar` archive, gzips them through an **imported** async streaming `compressor` interface (backed by the browser's `CompressionStream`), and saves the result — producing a `tar.gz` without ever buffering a whole file. Demonstrates an async streaming import flowing guest → host → guest, returning a stream from an async export via `wit_bindgen::spawn`, and mapping a component import to a JS adapter with `jco --map`. Ships a small temporary patch (`just patch-jco`) for two jco 1.20.0 transpile bugs around async streaming imports (bytecodealliance/jco#1601). |
+| [examples/apps/cli-metadata-printer](examples/apps/cli-metadata-printer) | A Rust CLI component and a Python library component linked with `wac`, streaming data both directions through an `async` WIT interface. Demonstrates how to export an **async** `wasi:cli/run` (which a plain `wasm32-wasip2` binary cannot do) from a `wasm32-wasip2` `cdylib` using the `wasip3` crate, while still using `std` for file and stdio access, and how to fetch URLs over async `wasi:http` with the `http` crate via `wasip3`'s `http-compat` feature. |
+| [examples/apps/cli-tgz-maker](examples/apps/cli-tgz-maker) | A three-component CLI `tar.gz` tool: a Rust CLI driver imports an async streaming `archiver`, which in turn imports an async streaming `compressor`, composed with `wac plug` and run under `wasmtime`. Demonstrates multi-step composition (plug into plug) and async streams flowing across three components. |
+| [examples/apps/browser-tgz-maker](examples/apps/browser-tgz-maker) | The same `tar-archiver` component transpiled with `jco` and driven from the **browser** over JSPI, gzipping files through an **imported** async streaming `compressor` interface backed by the browser's `CompressionStream`. Demonstrates an async streaming import flowing guest → host → guest, returning a stream from an async export via `wit_bindgen::spawn`, and mapping a component import to a JS adapter with `jco --map`. Ships a small temporary patch (`just patch-jco`) for two jco 1.21.0 transpile bugs around async streaming imports (bytecodealliance/jco#1601). |
 
 ## Toolchain
 
@@ -41,8 +47,15 @@ The included dev container ships with the canonical Component Model toolchain:
 3. Build and run an example:
 
    ```sh
-   cd examples/async-composition
-   make run
+   cd examples/apps/cli-tgz-maker
+   just test
+   ```
+
+   Or, from the repository root, run every example's checks at once with the
+   top-level [justfile](justfile):
+
+   ```sh
+   just ci
    ```
 
 4. Use an example as a template for your own components, or start a fresh world
@@ -51,7 +64,7 @@ The included dev container ships with the canonical Component Model toolchain:
 ## Ways to use this repo
 
 - **Start from an example.** Copy an `examples/` project and adapt its WIT,
-  `Makefile`, and component sources.
+  `justfile`, and component sources.
 - **Consult the reference.** [OUTLINE.md](OUTLINE.md) captures the rules and
   tooling boundaries that are easy to get wrong (cyclic imports, sync-vs-async
   `run`, target selection, composition order).

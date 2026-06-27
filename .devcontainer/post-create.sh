@@ -9,7 +9,7 @@ CARGO_HOME="${CARGO_HOME:-/usr/local/cargo}"
 # componentize-py is a Python wheel (installed via pipx below); pin it here.
 COMPONENTIZE_PY_VERSION="0.23.0"
 # jco — JavaScript toolchain for Wasm components, installed via npm.
-JCO_VERSION="1.20.0"
+JCO_VERSION="1.21.0"
 
 # The cargo registry cache and target volumes are created owned by root; hand
 # them to the dev user so cargo can write to them. The shared cargo bin dir is

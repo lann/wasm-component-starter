@@ -1,7 +1,8 @@
 """metadata-parser component: extract page metadata from an HTML document.
 
 This module is compiled to a WebAssembly component with `componentize-py`. It
-implements the `extractor` interface from `../../wit/metadata-parser/world.wit`:
+implements the `extractor` interface from the `metadata-parser` world in
+`../../wit/html-metadata` (package `example:html-metadata`):
 it receives the document as an incoming byte `stream`, feeds it to Python's
 built-in `html.parser`, and emits `(key, value)` metadata pairs on an outgoing
 `stream` as they are discovered.

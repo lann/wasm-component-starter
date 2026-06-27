@@ -13,5 +13,5 @@ crate-type = ["cdylib"]
 futures-util = "0.3"
 # Provides the async `wasi:cli/run` export. No `http-compat` here -- this driver
 # only touches the filesystem and the `archiver` import.
-wasip3 = "0.6"
+wasip3 = "0.7"
 wit-bindgen = "0.57"
