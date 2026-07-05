@@ -15,6 +15,10 @@ apps := "examples/apps/cli-metadata-printer examples/apps/cli-tgz-maker examples
 default:
     @just --justfile {{ justfile() }} --list
 
+# Install the Component Model CLI toolchain (requires Rust, Node, and Python).
+setup:
+    bash scripts/install-tools.sh
+
 # Build every component and app.
 build: build-cli-apps build-browser
 

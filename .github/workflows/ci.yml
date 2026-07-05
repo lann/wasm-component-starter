@@ -6,11 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# Pin tool versions to match .devcontainer/post-create.sh so CI mirrors local dev.
-env:
-  JCO_VERSION: "1.21.0"
-  COMPONENTIZE_PY_VERSION: "0.23.0"
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -22,58 +17,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          # The component crates pin these wasm targets via .cargo/config.toml.
-          targets: wasm32-wasip2, wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@main
-
-      # Component Model CLI tooling. wasmtime resolves to its latest release,
-      # which is 46+ and supports final WASI 0.3.0 (required to run the examples).
-      - name: Install Component Model CLI tools
-        run: |
-          cargo binstall --no-confirm \
-            wasmtime-cli \
-            wasm-tools \
-            wit-bindgen-cli \
-            wac-cli \
-            cargo-component \
-            just
-
-      - name: Install jco
-        run: npm install -g "@bytecodealliance/jco@${JCO_VERSION}"
-
-      - name: Install componentize-py
-        run: python3 -m pip install --upgrade "componentize-py==${COMPONENTIZE_PY_VERSION}"
-
-      - name: Print toolchain versions
-        run: |
-          rustc --version
-          wasmtime --version
-          wasm-tools --version
-          wit-bindgen --version
-          wac --version
-          componentize-py --version
-          jco --version
-          node --version
-          just --version
+      # Installs the same toolchain (and version pins) as the dev container and
+      # the Copilot cloud agent, via scripts/install-tools.sh.
+      - name: Set up Component Model toolchain
+        uses: ./.github/actions/setup-toolchain
 
       - name: Run CI checks
         run: just ci
