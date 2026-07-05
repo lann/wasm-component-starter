@@ -133,7 +133,7 @@ function assert(cond, msg) {
 
 // The nested-stream interface (`archive(entries: stream<entry>)`, each entry
 // carrying its own `contents: stream<u8>`) needs the patched jco installed by
-// `just patch-jco`; stock jco 1.21.0 throws an (internally swallowed)
+// `just patch-jco`; stock jco 1.24.6 throws an (internally swallowed)
 // `ReferenceError` while lowering an entry's `name`, which stalls the read side
 // forever. With the patch the pipeline round-trips fine (and so does the same
 // component under wasmtime, see ../../apps/cli-tgz-maker). This watchdog guards
@@ -143,7 +143,7 @@ const watchdog = setTimeout(() => {
     console.error(
         `FAIL: timed out after ${WATCHDOG_MS} ms.\n` +
             "  The nested-stream pipeline stalled. Did you run 'just patch-jco'?\n" +
-            "  Stock jco 1.21.0 cannot drive archive(entries: stream<entry>)\n" +
+            "  Stock jco 1.24.6 cannot drive archive(entries: stream<entry>)\n" +
             "  where each entry carries its own contents: stream<u8>; the patch\n" +
             "  under jco-patch/ fixes it. The same component also round-trips\n" +
             "  under wasmtime via ../../apps/cli-tgz-maker.",

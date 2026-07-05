@@ -89,7 +89,7 @@ fi
 # downloads Chrome); `--filter` scopes the install to the jco package.
 if [[ ! -d "$JCO_SRC/packages/jco/node_modules/commander" ]]; then
   if ! command -v pnpm >/dev/null 2>&1; then
-    echo "error: pnpm is required to install jco 1.21.0's workspace dependencies" >&2
+    echo "error: pnpm is required to install jco's workspace dependencies" >&2
     exit 1
   fi
   echo "Installing jco's Node dependencies (pnpm install) ..."

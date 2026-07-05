@@ -1,19 +1,22 @@
 # jco `main` patches
 
-The patches in the parent directory target the released **`jco-v1.21.0`** tag.
-Upstream `main` has since fixed two of the four bugs this example hit, so a
-different (smaller) set of patches is needed when building from `main`.
+The combined patch in the parent directory targets the released **`jco-v1.24.6`**
+tag. As of 1.24.6 the released tag and upstream `main` need the *same* two
+fixes, so `main/double-lower-and-string.patch` and the parent
+`function_bindgen.patch` are equivalent (they differ only in the line offsets of
+their hunks). Earlier releases (through `jco-v1.21.0`) needed two additional
+fixes that have since landed upstream.
 
 ## Status on `main` (verified against `main` HEAD)
 
 | # | Bug | Files | Fixed upstream on `main`? |
 |---|-----|-------|----------------------------|
-| 1 | [#1601](https://github.com/bytecodealliance/jco/issues/1601) — `future`/`stream` **lift** references an undefined `streamResult0`/`futureResult0` | `function_bindgen.rs` | ✅ Yes (FutureLift/StreamLift refactored to `match (is_async, for_import)`) |
+| 1 | [#1601](https://github.com/bytecodealliance/jco/issues/1601) — `future`/`stream` **lift** references an undefined `streamResult0`/`futureResult0` | `function_bindgen.rs` | ✅ Yes (also in the `jco-v1.24.6` release) |
 | 2 | Async import return `stream`/`future` is **lowered twice** → `ReadableStream is locked` | `function_bindgen.rs` | ❌ No — still needs patching |
-| 3 | Host-lowered `stream` omits the `typedArray` element-metadata field | `transpile_bindgen.rs` | ✅ Yes |
+| 3 | Host-lowered `stream` omits the `typedArray` element-metadata field | `transpile_bindgen.rs` | ✅ Yes (also in the `jco-v1.24.6` release) |
 | 4 | `LowerFlatStringUtf8` never emits the `_utf8AllocateAndEncode` helper → swallowed `ReferenceError` | `intrinsics/mod.rs` | ❌ No — still needs patching |
 
-So on `main` only bugs **#2** and **#4** remain.
+So on both `main` and the `jco-v1.24.6` release only bugs **#2** and **#4** remain.
 
 ## `double-lower-and-string.patch`
 
