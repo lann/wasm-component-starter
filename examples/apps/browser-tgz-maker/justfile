@@ -6,11 +6,11 @@ default:
 build: transpile
 
 # One-time: build and install a patched jco that can transpile this example.
-# jco 1.21.0 mis-generates the async streaming `compressor` import (see
-# bytecodealliance/jco#1601) and fails to emit the `_utf8AllocateAndEncode`
-# helper used when lowering string fields inside the nested `stream<entry>`
-# (see jco-patch/apply.sh). Run this once before `just build`/`test`/`serve`;
-# run `just restore-jco` to revert.
+# jco 1.24.6 mis-generates the async streaming `compressor` import's return
+# stream (double-lower; see bytecodealliance/jco#1601) and fails to emit the
+# `_utf8AllocateAndEncode` helper used when lowering string fields inside the
+# nested `stream<entry>` (see jco-patch/apply.sh). Run this once before
+# `just build`/`test`/`serve`; run `just restore-jco` to revert.
 patch-jco:
     bash jco-patch/apply.sh
 

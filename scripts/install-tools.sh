@@ -19,10 +19,10 @@ set -euo pipefail
 # componentize-py is a Python wheel; jco is an npm package. The cargo-binstall
 # tools below intentionally track their latest crates.io releases.
 COMPONENTIZE_PY_VERSION="${COMPONENTIZE_PY_VERSION:-0.23.0}"
-JCO_VERSION="${JCO_VERSION:-1.21.0}"
+JCO_VERSION="${JCO_VERSION:-1.24.6}"
 # pnpm is needed by examples/apps/browser-tgz-maker/jco-patch/apply.sh to
-# install jco's workspace dependencies (jco 1.21.0 uses pnpm `catalog:`
-# versions that npm can't parse).
+# install jco's workspace dependencies (jco uses pnpm `catalog:` versions that
+# npm can't parse).
 PNPM_VERSION="${PNPM_VERSION:-10}"
 
 # --- Component Model CLI tooling via cargo-binstall ---------------------------

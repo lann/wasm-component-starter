@@ -1,7 +1,8 @@
-# jco 1.21.0: lowering a `string` inside a stream/record payload throws `ReferenceError: _utf8AllocateAndEncode is not defined`
+# jco: lowering a `string` inside a stream/record payload throws `ReferenceError: _utf8AllocateAndEncode is not defined`
 
 The fix for this specific issue is [`string-lower-intrinsic.patch`](string-lower-intrinsic.patch)
 (also rolled into the combined [`function_bindgen.patch`](function_bindgen.patch)).
+This bug is still present as of jco 1.24.6.
 
 ## Summary
 
