@@ -1,108 +1,84 @@
 diff --git a/crates/js-component-bindgen/src/function_bindgen.rs b/crates/js-component-bindgen/src/function_bindgen.rs
-index 7a947cf..0fd71c7 100644
+index b2cfca2..74ac041 100644
 --- a/crates/js-component-bindgen/src/function_bindgen.rs
 +++ b/crates/js-component-bindgen/src/function_bindgen.rs
-@@ -2689,6 +2689,15 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -2721,9 +2721,18 @@ impl Bindgen for FunctionBindgen<'_> {
                          ("-1".into(), "undefined".into())
                      };
  
-+                // Mirror of `FutureLift`: lower a future operand inline only for
-+                // sync functions, or for async functions when the operand is an
-+                // incoming parameter. For async host *imports* the operand is
-+                // the function's return value, which is lowered by the async
-+                // return-handling code (`task.resolve`); lowering it inline too
-+                // would consume/settle the future and double-lower it.
+-                uwriteln!(
+-                    self.src,
+-                    r#"
++                // Lower a future operand inline only for sync functions, or for
++                // async functions when the operand is an incoming parameter. For
++                // async host *imports* the operand is the function's return
++                // value, which is lowered by the async return-handling code
++                // (`task.resolve`); lowering it inline too would consume/settle
++                // the future and double-lower it.
 +                if self.is_async && !self.params.iter().any(|p| p == future_arg) {
 +                    results.push(future_arg.clone());
 +                } else {
-                 uwriteln!(
-                     self.src,
-                     r#"
-@@ -2786,6 +2795,7 @@ impl Bindgen for FunctionBindgen<'_> {
-                 );
++                    uwriteln!(
++                        self.src,
++                        r#"
+                         if (!{is_future_lowerable_object_fn}({future_arg})) {{
+                             {debug_log_fn}('[Instruction::FutureLower] object is not a Promise/Thenable', {{ {future_arg} }});
+                             throw new Error('unrecognized future object (not Promise/Thenable)');
+@@ -2815,9 +2824,10 @@ impl Bindgen for FunctionBindgen<'_> {
  
-                 results.push(lowered_future_waitable_idx);
+                         const {lowered_future_waitable_idx} = readEnd{tmp}.waitableIdx();
+                     "#
+-                );
++                    );
+ 
+-                results.push(lowered_future_waitable_idx);
++                    results.push(lowered_future_waitable_idx);
 +                }
              }
  
              Instruction::FutureLift { payload, ty } => {
-@@ -2838,10 +2848,18 @@ impl Bindgen for FunctionBindgen<'_> {
-                 let tmp = self.tmp();
-                 let result_var = format!("futureResult{tmp}");
- 
--                // We only need to attempt to do an immediate lift in non-async cases,
--                // as the return of the function execution ('above' in the code)
--                // will be the future idx
--                if !self.is_async {
-+                // Emit an immediate lift for sync functions, and for async
-+                // *imports* that take a `future` as a parameter (the operand is
-+                // one of the function parameters, i.e. the incoming future-end
-+                // index). For async *exports*, the future-end index is the
-+                // function's return value (`ret`) and is handled by separate
-+                // return-handling code, so we must not lift it here.
-+                let lift_param_in_async = self
-+                    .is_async
-+                    && operands
-+                        .first()
-+                        .is_some_and(|op| self.params.iter().any(|p| p == op));
-+                if !self.is_async || lift_param_in_async {
-                     // If we're dealing with a sync function, we can use the return directly
-                     let arg_future_end_idx = operands
-                         .first()
-@@ -3010,6 +3028,17 @@ impl Bindgen for FunctionBindgen<'_> {
+@@ -3066,9 +3076,20 @@ impl Bindgen for FunctionBindgen<'_> {
  
                  let tmp = self.tmp();
                  let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
+-                uwriteln!(
+-                    self.src,
+-                    r#"
 +
-+                // Mirror of `StreamLift`: lower a stream operand inline only for
-+                // sync functions, or for async functions when the operand is an
-+                // incoming parameter (e.g. an export lowering a `stream` param
-+                // to hand to the guest). For async host *imports* the operand is
-+                // the function's return value, which is lowered by the async
-+                // return-handling code (`task.resolve`); lowering it inline too
-+                // would consume/lock the stream and double-lower it.
++                // Lower a stream operand inline only for sync functions, or for
++                // async functions when the operand is an incoming parameter
++                // (e.g. an export lowering a `stream` param to hand to the
++                // guest). For async host *imports* the operand is the function's
++                // return value, which is lowered by the async return-handling
++                // code (`task.resolve`); lowering it inline too would
++                // consume/lock the stream and double-lower it.
 +                if self.is_async && !self.params.iter().any(|p| p == stream_arg) {
 +                    results.push(stream_arg.clone());
 +                } else {
-                 uwriteln!(
-                     self.src,
-                     r#"
-@@ -3072,6 +3101,7 @@ impl Bindgen for FunctionBindgen<'_> {
-                 );
++                    uwriteln!(
++                        self.src,
++                        r#"
+                         if (!({async_iterator_symbol} in {stream_arg})
+                             && !({iterator_symbol} in {stream_arg})
+                             && !({stream_arg} instanceof {external_readable_stream_class})) {{
+@@ -3125,9 +3146,10 @@ impl Bindgen for FunctionBindgen<'_> {
  
-                 results.push(lowered_stream_waitable_idx);
+                         const {lowered_stream_waitable_idx} = readEnd{tmp}.waitableIdx();
+                     "#
+-                );
++                    );
+ 
+-                results.push(lowered_stream_waitable_idx);
++                    results.push(lowered_stream_waitable_idx);
 +                }
              }
  
              Instruction::StreamLift { payload, ty } => {
-@@ -3123,10 +3153,18 @@ impl Bindgen for FunctionBindgen<'_> {
-                 let tmp = self.tmp();
-                 let result_var = format!("streamResult{tmp}");
- 
--                // We only need to attempt to do an immediate lift in non-async cases,
--                // as the return of the function execution ('above' in the code)
--                // will be the stream idx
--                if !self.is_async {
-+                // Emit an immediate lift for sync functions, and for async
-+                // *imports* that take a `stream` as a parameter (the operand is
-+                // one of the function parameters, i.e. the incoming stream-end
-+                // index). For async *exports*, the stream-end index is the
-+                // function's return value (`ret`) and is handled by separate
-+                // return-handling code, so we must not lift it here.
-+                let lift_param_in_async = self
-+                    .is_async
-+                    && operands
-+                        .first()
-+                        .is_some_and(|op| self.params.iter().any(|p| p == op));
-+                if !self.is_async || lift_param_in_async {
-                     // If we're dealing with a sync function, we can use the return directly
-                     let arg_stream_end_idx = operands
-                         .first()
 diff --git a/crates/js-component-bindgen/src/intrinsics/mod.rs b/crates/js-component-bindgen/src/intrinsics/mod.rs
-index cafb412..3a8cad0 100644
+index c3cc58b..b6e9688 100644
 --- a/crates/js-component-bindgen/src/intrinsics/mod.rs
 +++ b/crates/js-component-bindgen/src/intrinsics/mod.rs
-@@ -1474,6 +1474,25 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+@@ -1487,6 +1487,25 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
      {
          args.intrinsics
              .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
@@ -128,39 +104,3 @@ index cafb412..3a8cad0 100644
      }
  
      if args
-diff --git a/crates/js-component-bindgen/src/transpile_bindgen.rs b/crates/js-component-bindgen/src/transpile_bindgen.rs
-index 64d9e10..00db938 100644
---- a/crates/js-component-bindgen/src/transpile_bindgen.rs
-+++ b/crates/js-component-bindgen/src/transpile_bindgen.rs
-@@ -6064,6 +6064,7 @@ pub fn gen_flat_lower_fn_js_expr(
-                 is_none_type,
-                 is_numeric_type,
-                 is_async_value,
-+                typed_array_js,
-             ) = match payload {
-                 None => (
-                     0,
-@@ -6075,6 +6076,7 @@ pub fn gen_flat_lower_fn_js_expr(
-                     true,
-                     false,
-                     false,
-+                    "undefined",
-                 ),
-                 Some(payload_ty) => {
-                     let cabi = instantiator.types.canonical_abi(&payload_ty);
-@@ -6105,6 +6107,7 @@ pub fn gen_flat_lower_fn_js_expr(
-                             payload_ty,
-                             InterfaceType::Stream(_) | InterfaceType::Future(_)
-                         ),
-+                        js_typed_array_ctor(&payload_ty).unwrap_or("undefined"),
-                     )
-                 }
-             };
-@@ -6121,6 +6124,7 @@ pub fn gen_flat_lower_fn_js_expr(
-                            isNumeric: {is_numeric_type},
-                            isBorrowed: {is_borrowed},
-                            isAsyncValue: {is_async_value},
-+                           typedArray: {typed_array_js},
-                            flatCount: {payload_flat_count_js},
-                            align32: {payload_align32},
-                            size32: {payload_size32},
