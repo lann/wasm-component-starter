@@ -4,7 +4,7 @@
 
   // Toolchains come from the official dev container Features rather than a
   // custom Dockerfile. The Rust feature installs rustup + cargo and adds the
-  // wasm targets; Node 26 ships JSPI natively (no flag required), which jco
+  // wasm targets; Node 24 ships JSPI natively (no flag required), which jco
   // relies on for async component transpilation; Python backs componentize-py.
   // The component-model CLIs themselves are installed with cargo-binstall in
   // the post-create hook (see post-create.sh).
@@ -14,7 +14,7 @@
       "targets": "wasm32-wasip2,wasm32-unknown-unknown"
     },
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "26"
+      "version": "24"
     },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12",

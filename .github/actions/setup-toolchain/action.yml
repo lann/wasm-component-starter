@@ -9,7 +9,7 @@ inputs:
   node-version:
     description: Node.js version (22+ ships JSPI behind a flag; 24+ natively)
     required: false
-    default: "22"
+    default: "24"
   python-version:
     description: Python version backing componentize-py
     required: false
