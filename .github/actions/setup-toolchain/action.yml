@@ -1,0 +1,46 @@
+name: Setup Component Model toolchain
+description: >
+  Install everything needed to build and test the examples: a Rust toolchain
+  with the wasm targets, Node.js, Python, and the Component Model CLI tools
+  (via scripts/install-tools.sh, the shared single source of version pins).
+  Used by both CI and the Copilot cloud agent so all environments match.
+
+inputs:
+  node-version:
+    description: Node.js version (22+ ships JSPI behind a flag; 24+ natively)
+    required: false
+    default: "22"
+  python-version:
+    description: Python version backing componentize-py
+    required: false
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        # The component crates pin these wasm targets via .cargo/config.toml.
+        targets: wasm32-wasip2, wasm32-unknown-unknown
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: Install Component Model CLI tools
+      shell: bash
+      run: bash scripts/install-tools.sh

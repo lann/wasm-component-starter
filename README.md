@@ -40,6 +40,17 @@ The included dev container ships with the canonical Component Model toolchain:
 - [`componentize-py`](https://github.com/bytecodealliance/componentize-py) — compile Python into a component
 - A Rust toolchain with the `wasm32-wasip2` and `wasm32-unknown-unknown` targets
 
+The tool list and version pins live in a single shared installer,
+[scripts/install-tools.sh](scripts/install-tools.sh), used by every
+environment so they never drift:
+
+| Environment | Entry point |
+| --- | --- |
+| Dev container (human or local agent) | [.devcontainer/post-create.sh](.devcontainer/post-create.sh) |
+| CI | [.github/workflows/ci.yml](.github/workflows/ci.yml) via the [setup-toolchain](.github/actions/setup-toolchain/action.yml) composite action |
+| Copilot cloud agent | [.github/workflows/copilot-setup-steps.yml](.github/workflows/copilot-setup-steps.yml) via the same composite action |
+| Anywhere with Rust, Node, and Python | `just setup` |
+
 ## Getting started
 
 1. Open this repository in the dev container (VS Code: *Reopen in Container*).
