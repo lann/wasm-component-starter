@@ -37,7 +37,12 @@ if ! command -v cargo-binstall >/dev/null 2>&1; then
   curl -L --proto '=https' --tlsv1.2 -sSf \
     https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 fi
-cargo binstall --no-confirm \
+# --force reinstalls unconditionally. Without it, cargo-binstall trusts the
+# `.crates.toml` metadata in CARGO_HOME to skip tools it thinks are already
+# installed. In CI, Swatinem/rust-cache restores that metadata but prunes the
+# matching binaries from ~/.cargo/bin, so the tools would be reported as
+# "already installed" yet be missing on PATH (e.g. `just: command not found`).
+cargo binstall --no-confirm --force \
   wasmtime-cli \
   wasm-tools \
   wit-bindgen-cli \
