@@ -27,14 +27,9 @@ build-cli-apps:
     just --justfile examples/apps/cli-metadata-printer/justfile build
     just --justfile examples/apps/cli-tgz-maker/justfile build
 
-# Build the browser app (applies a temporary jco patch, reverted afterwards).
+# Build the browser app (transpiled with jco).
 build-browser:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd examples/apps/browser-tgz-maker
-    just patch-jco
-    trap 'just restore-jco' EXIT
-    just build
+    just --justfile examples/apps/browser-tgz-maker/justfile build
 
 # Run every example's test suite.
 test: test-cli-apps test-browser
@@ -44,14 +39,9 @@ test-cli-apps:
     just --justfile examples/apps/cli-metadata-printer/justfile test
     just --justfile examples/apps/cli-tgz-maker/justfile test
 
-# Run the browser app test under Node JSPI (applies a temporary jco patch, reverted afterwards).
+# Run the browser app test under Node JSPI.
 test-browser:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd examples/apps/browser-tgz-maker
-    just patch-jco
-    trap 'just restore-jco' EXIT
-    just test
+    just --justfile examples/apps/browser-tgz-maker/justfile test
 
 # Format all Rust component crates.
 fmt:

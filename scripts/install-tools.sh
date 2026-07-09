@@ -19,11 +19,10 @@ set -euo pipefail
 # componentize-py is a Python wheel; jco is an npm package. The cargo-binstall
 # tools below intentionally track their latest crates.io releases.
 COMPONENTIZE_PY_VERSION="${COMPONENTIZE_PY_VERSION:-0.23.0}"
-JCO_VERSION="${JCO_VERSION:-1.24.6}"
-# pnpm is needed by examples/apps/browser-tgz-maker/jco-patch/apply.sh to
-# install jco's workspace dependencies (jco uses pnpm `catalog:` versions that
-# npm can't parse).
-PNPM_VERSION="${PNPM_VERSION:-10}"
+# jco 1.25.1 bundles @bytecodealliance/jco-transpile 0.4.2, whose code generator
+# fixes the async-streaming transpile bugs the browser-tgz-maker example used to
+# patch locally (see examples/apps/browser-tgz-maker/README.md).
+JCO_VERSION="${JCO_VERSION:-1.25.1}"
 
 # --- Component Model CLI tooling via cargo-binstall ---------------------------
 # cargo-binstall fetches prebuilt release binaries (falling back to a source
@@ -49,8 +48,8 @@ cargo binstall --no-confirm \
   cargo-component \
   just
 
-# --- jco (JavaScript -> component) + pnpm -------------------------------------
-npm install -g "@bytecodealliance/jco@${JCO_VERSION}" "pnpm@${PNPM_VERSION}"
+# --- jco (JavaScript -> component) --------------------------------------------
+npm install -g "@bytecodealliance/jco@${JCO_VERSION}"
 
 # --- componentize-py (Python -> component) ------------------------------------
 # The console script lands on PATH (~/.local/bin with --user, or the active
@@ -70,6 +69,5 @@ printf '  wac              %s\n' "$(wac --version | awk '{print $2}')"
 printf '  cargo-component  %s\n' "$(cargo component --version 2>/dev/null | awk '{print $2}')"
 printf '  componentize-py  %s\n' "$(componentize-py --version 2>/dev/null | awk '{print $NF}')"
 printf '  jco              %s\n' "$(jco --version)"
-printf '  pnpm             %s\n' "$(pnpm --version)"
 printf '  node             %s\n' "$(node --version)"
 printf '  just             %s\n' "$(just --version 2>/dev/null | awk '{print $2}')"

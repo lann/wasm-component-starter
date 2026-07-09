@@ -8,7 +8,7 @@
 //      Internally the component encodes a tar stream and pipes it through the
 //      imported `compressor` (../web/compressor.js, backed by the platform's
 //      CompressionStream) -- the async streaming *import* that exercises the
-//      jco #1601 fix.
+//      jco #1601 async-import fix (fixed upstream in jco 1.25.1).
 //   3. Collect, gunzip, and assert the result is a valid tar of the inputs.
 //
 // Usage: node test/smoke.mjs [path/to/archiver.js]
@@ -132,21 +132,21 @@ function assert(cond, msg) {
 // --- Run the pipeline ------------------------------------------------------
 
 // The nested-stream interface (`archive(entries: stream<entry>)`, each entry
-// carrying its own `contents: stream<u8>`) needs the patched jco installed by
-// `just patch-jco`; stock jco 1.24.6 throws an (internally swallowed)
-// `ReferenceError` while lowering an entry's `name`, which stalls the read side
-// forever. With the patch the pipeline round-trips fine (and so does the same
-// component under wasmtime, see ../../apps/cli-tgz-maker). This watchdog guards
-// against any future stall so the test fails fast instead of hanging.
+// carrying its own `contents: stream<u8>`) used to require a patched jco: stock
+// jco 1.24.6 threw an (internally swallowed) `ReferenceError` while lowering an
+// entry's `name`, which stalled the read side forever. jco 1.25.1 (jco-transpile
+// 0.4.2) fixes this upstream, so the pipeline round-trips with a stock jco (and
+// so does the same component under wasmtime, see ../../apps/cli-tgz-maker). This
+// watchdog guards against any future stall so the test fails fast instead of
+// hanging.
 const WATCHDOG_MS = 10_000;
 const watchdog = setTimeout(() => {
     console.error(
         `FAIL: timed out after ${WATCHDOG_MS} ms.\n` +
-            "  The nested-stream pipeline stalled. Did you run 'just patch-jco'?\n" +
-            "  Stock jco 1.24.6 cannot drive archive(entries: stream<entry>)\n" +
-            "  where each entry carries its own contents: stream<u8>; the patch\n" +
-            "  under jco-patch/ fixes it. The same component also round-trips\n" +
-            "  under wasmtime via ../../apps/cli-tgz-maker.",
+            "  The nested-stream pipeline stalled. This needs jco 1.25.1+\n" +
+            "  (jco-transpile 0.4.2+) to drive archive(entries: stream<entry>)\n" +
+            "  where each entry carries its own contents: stream<u8>. The same\n" +
+            "  component also round-trips under wasmtime via ../../apps/cli-tgz-maker.",
     );
     process.exit(1);
 }, WATCHDOG_MS);

@@ -11,9 +11,10 @@
 // component calls `compress` with the tar byte stream and consumes the gzip
 // byte stream it returns -- all without buffering.
 //
-// NOTE: this is the import that triggers jco bug #1601 (an async import taking a
-// `stream` parameter). The repo ships a patched jco so the generated glue lifts
-// the incoming stream correctly; see this example's README.
+// NOTE: this is the import that used to trigger jco bug #1601 (an async import
+// taking a `stream` parameter). jco 1.25.1 (jco-transpile 0.4.2) fixes the
+// generated glue upstream, so the incoming stream lifts correctly with a stock
+// jco; see this example's README.
 
 /**
  * gzip-compress a byte stream.

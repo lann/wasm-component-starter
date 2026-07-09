@@ -22,10 +22,11 @@
 //! ## jco note (bug bytecodealliance/jco#1601)
 //!
 //! Transpiling an async *import* whose parameter is a `future`/`stream` with
-//! `--async-mode jspi` is broken upstream. The browser app deliberately
+//! `--async-mode jspi` used to be broken upstream. The browser app deliberately
 //! exercises exactly that (the `compressor.compress` import takes a
-//! `stream<u8>`); it carries a small jco patch to work around it until the fix
-//! lands. The CLI composition runs under `wasmtime` and needs no patch.
+//! `stream<u8>`); it once carried a small jco patch to work around it, but the
+//! fix has landed upstream (jco 1.25.1 / jco-transpile 0.4.2), so a stock jco
+//! now transpiles it correctly. The CLI composition runs under `wasmtime`.
 
 use tar_core::builder::HeaderBuilder;
 use tar_core::EntryType;
