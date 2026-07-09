@@ -5,19 +5,6 @@ default:
 # Build the component and transpile it to a browser-ready ES module.
 build: transpile
 
-# One-time: build and install a patched jco that can transpile this example.
-# jco 1.24.6 mis-generates the async streaming `compressor` import's return
-# stream (double-lower; see bytecodealliance/jco#1601) and fails to emit the
-# `_utf8AllocateAndEncode` helper used when lowering string fields inside the
-# nested `stream<entry>` (see jco-patch/apply.sh). Run this once before
-# `just build`/`test`/`serve`; run `just restore-jco` to revert.
-patch-jco:
-    bash jco-patch/apply.sh
-
-# Revert the patched jco installed by `just patch-jco`.
-restore-jco:
-    bash jco-patch/restore.sh
-
 # Rust -> bare wasm32-unknown-unknown core module -> component. Built by the
 # tar-archiver component's own justfile under ../../components.
 component:

@@ -32,16 +32,6 @@ the whole archive) in memory.
   archive.tar.gz  (streamed to disk via showSaveFilePicker, or a Blob fallback)
 ```
 
-> **Nested streams under jco:** this app uses a nested-stream interface
-> (`archive(entries: stream<entry>)`, where each `entry` carries its own
-> `contents: stream<u8>`). Stock jco 1.24.6 fails to drive it — lowering an
-> `entry`'s `name` string throws an (internally swallowed) `ReferenceError` that
-> looks like a deadlock. The [`jco` patch](#the-jco-patch-this-example-requires-bytecodeallianceJco1601)
-> this app installs fixes that, so the *same* component now round-trips both in
-> the browser and under wasmtime (see the sibling
-> [`cli-tgz-maker`](../cli-tgz-maker)). Run `just patch-jco` once before
-> `just test`/`just serve`.
-
 ## Why this example exists
 
 It is a small but end-to-end demonstration of running an **async, streaming**
@@ -88,90 +78,23 @@ the tar producer with `wit_bindgen::spawn`, hands the tar stream to the imported
 component never reads or re-emits the result bytes itself. See
 [../../components/tar-archiver/src/lib.rs](../../components/tar-archiver/src/lib.rs).
 
-Returning a host-backed stream straight out of the export used to look like it
-truncated the gzip trailer: all the bytes actually arrived, but each element
-came back as a bare `number` rather than a `Uint8Array`, so a consumer doing
-`Uint8Array.from(value)` got empty chunks and the stream looked short. The cause
-was a jco code-gen bug (a host-lowered stream omitted the `typedArray` field
-that guest-created streams carry); jco 1.24.6 fixes this upstream, which is what
-lets `archive` return the compressor stream directly instead of reading and
-re-emitting it.
-
 The 512-byte `ustar` headers are built with the
 [`tar-core`](https://crates.io/crates/tar-core) crate rather than hand-rolled
 octal/checksum encoding; see `build_header` in
 [../../components/tar-archiver/src/lib.rs](../../components/tar-archiver/src/lib.rs).
 
-## The `jco` patch this example requires (bytecodealliance/jco#1601)
-
-This example deliberately exercises a shape that jco mis-transpiles: an
-async **import** whose function takes a `stream<u8>` parameter *and* returns a
-`stream<u8>`, whose result the `archive` export then returns directly, plus a
-nested `stream<entry>` whose elements each carry their own `contents: stream<u8>`.
-Transpiling it with `--async-mode jspi` originally hit four code-generation bugs
-in jco's `js-component-bindgen`. jco 1.24.6 fixes two of them upstream (bugs 1
-and 3 below); the remaining two still need the patch this example ships:
-
-1. **[bytecodealliance/jco#1601](https://github.com/bytecodealliance/jco/issues/1601)
-   — the lift side.** *(Fixed upstream in jco 1.24.6.)* The lifted
-   `future`/`stream` *parameter* of an async import was referenced
-   (`streamResult0` / `futureResult0`) but never defined, throwing a
-   `ReferenceError` at runtime.
-2. **The mirror bug — the lower side.** *(Still patched.)* The `stream`/`future`
-   *return value* of an async host import is lowered twice (once inline, once by
-   the async task-return machinery). The inline lower locks the host
-   `ReadableStream`, throwing `TypeError: ReadableStream is locked`.
-3. **The stream element-metadata bug.** *(Fixed upstream in jco 1.24.6.)* A
-   host-lowered `stream` omitted the `typedArray` field that guest-created
-   streams (`streamNew`) include, so reading a directly-returned host
-   `stream<u8>` yielded bare `number`s instead of `Uint8Array` chunks (see the
-   section above).
-4. **The missing string-encode intrinsic.** *(Still patched.)* Lowering a
-   `string` field inside a stream/record payload (e.g. an `entry.name` carried by
-   the `stream<entry>`) emits a call to the `_utf8AllocateAndEncode` helper, but
-   jco's `render_intrinsics` never emits the helper's *definition*: the
-   `LowerFlatStringUtf8` dependency block inserts only the `TEXT_ENCODER_UTF8`
-   global, not the `Utf8Encode` string intrinsic. The resulting `ReferenceError:
-   _utf8AllocateAndEncode is not defined` is swallowed by the stream-write
-   machinery, so the read side waits forever — it *looks* like a nested-stream
-   deadlock but is really a crash in string lowering. The patch makes that
-   dependency block also emit `Utf8Encode` (and adds the matching
-   `Utf16Encode` + `IsLE` for UTF-16).
-
-Until the upstream fix ships, this example carries a small patch to jco's code
-generator that fixes the two remaining bugs (2 and 4)
-([jco-patch/function_bindgen.patch](jco-patch/function_bindgen.patch)). Apply it
-once before building:
-
-```sh
-just patch-jco     # clone jco @ jco-v1.24.6, apply the patch, build, install
-```
-
-`patch-jco` backs up the stock jco objects as `*.orig`, so you can drop the
-workaround at any time with `just restore-jco`. This is a temporary measure; the
-maintainers have indicated a proper fix is coming.
-
 ## Nested streams under jco
 
 This app's interface is `archive(entries: stream<entry>) -> stream<u8>`, where
 each `entry` carries its own `contents: stream<u8>` — i.e. a **stream whose
-elements are themselves streams**. wasmtime's component-model implementation
-handles this directly; the sibling [`cli-tgz-maker`](../cli-tgz-maker) drives the
-*same* `tar-archiver` component to a byte-for-byte round-trip (including a 10 MB
-file).
+elements are themselves streams**, plus an async **import** whose function takes
+a `stream<u8>` parameter *and* returns a `stream<u8>` that the `archive` export
+returns directly. jco transpiles this shape (`--async-mode jspi`) so the *same*
+`tar-archiver` component round-trips under jco exactly as it does under wasmtime;
+the sibling [`cli-tgz-maker`](../cli-tgz-maker) drives it to a byte-for-byte
+round-trip (including a 10 MB file).
 
-Stock jco 1.24.6 appears to *deadlock* on this shape: even a single-member
-archive hangs on the first read of the host-lowered `stream<entry>`. That turns
-out **not** to be a scheduling deadlock at all — lowering the first `entry`'s
-`name` string throws `ReferenceError: _utf8AllocateAndEncode is not defined`
-(bug 4 above: jco emits the call but never the helper's definition), and the
-stream-write machinery swallowed the error, so the read side simply waited
-forever. The [jco patch](#the-jco-patch-this-example-requires-bytecodeallianceJco1601)
-this app installs emits the missing intrinsic, after which the nested-stream
-pipeline round-trips under jco exactly as it does under wasmtime. Run
-`just patch-jco` once and `just test`/`just serve` work.
-
-The headless [test/smoke.mjs](test/smoke.mjs) still carries a short watchdog that
+The headless [test/smoke.mjs](test/smoke.mjs) carries a short watchdog that
 aborts with a clear message if a read ever stalls, so a future regression fails
 fast instead of hanging.
 
@@ -182,9 +105,6 @@ Prerequisites are provided by the dev container (`rust`, `wasm-tools`, `jco`,
 
 ```sh
 cd examples/apps/browser-tgz-maker
-
-# One-time: build and install the patched jco (see the section above):
-just patch-jco
 
 # Headless end-to-end check (builds, transpiles, runs the pipeline under Node):
 just test
@@ -206,5 +126,4 @@ archive.tar.gz**, and save the result.
 | [web/compressor.js](web/compressor.js) | The host adapter implementing the imported `compress` with `CompressionStream`. |
 | [web/index.html](web/index.html), [web/main.js](web/main.js) | The browser UI and the stream-wiring driver. |
 | [test/smoke.mjs](test/smoke.mjs) | A headless Node run of the full pipeline, asserting the archive round-trips. |
-| [jco-patch/](jco-patch/) | The temporary jco patch and `apply.sh` / `restore.sh` scripts. |
-| [justfile](justfile) | `patch-jco`, `restore-jco`, `build`, `transpile`, `serve`, `test`, `clean` recipes. |
+| [justfile](justfile) | `build`, `transpile`, `serve`, `test`, `clean` recipes. |

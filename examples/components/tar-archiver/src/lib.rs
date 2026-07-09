@@ -18,14 +18,6 @@
 //! producer with [`wit_bindgen::spawn`], hands the tar stream to the imported
 //! compressor, and returns the compressor's gzipped output stream *directly* --
 //! the component never has to own or re-emit the result bytes itself.
-//!
-//! ## jco note (bug bytecodealliance/jco#1601)
-//!
-//! Transpiling an async *import* whose parameter is a `future`/`stream` with
-//! `--async-mode jspi` is broken upstream. The browser app deliberately
-//! exercises exactly that (the `compressor.compress` import takes a
-//! `stream<u8>`); it carries a small jco patch to work around it until the fix
-//! lands. The CLI composition runs under `wasmtime` and needs no patch.
 
 use tar_core::builder::HeaderBuilder;
 use tar_core::EntryType;
